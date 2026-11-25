@@ -239,6 +239,63 @@ async function main() {
     globalThis.BS.api = env.api;
   });
 
+  await test('首次同步远端无文件且本地为空仍创建 bookmarks.json', async () => {
+    const e3 = createEnv();
+    await BS.config.save({
+      owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
+      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
+    });
+    const r = await BS.sync.runSync();
+    assert.equal(r.status, 'pushed');
+    assert.ok(e3.remote, '远端文件必须被创建');
+    const payload = JSON.parse(e3.remote.content);
+    assert.equal(payload.tree.length, 3, '应完整写入浏览器的三个根文件夹');
+    assert.deepEqual(payload.tree.map(n => n.title), ['Bookmarks bar', 'Other bookmarks', 'Mobile bookmarks']);
+    assert.ok(payload.tree.every(n => n.type === 'folder' && Array.isArray(n.children)));
+    assert.match(r.message, /创建 bookmarks\.json/);
+  });
+
+  await test('同步进度按阶段上报到 100% 完成', async () => {
+    const e4 = createEnv();
+    await BS.config.save({
+      owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
+      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
+    });
+    e4.addBookmark('1', '进度测试书签', 'https://progress.example');
+    const events = [];
+    BS.sync.setProgressHandler(p => { events.push(p); return Promise.resolve(); });
+    const r = await BS.sync.runSync();
+    BS.sync.setProgressHandler(null);
+    assert.equal(r.ok, true);
+    assert.ok(events.some(p => p.percent === 5 && p.phase === 'config'));
+    assert.ok(events.some(p => p.percent === 30 && p.phase === 'remote'));
+    assert.ok(events.some(p => p.percent === 80 && p.phase === 'write'));
+    assert.ok(events.some(p => p.percent === 100 && p.state === 'success'));
+    const percents = events.map(p => p.percent);
+    assert.deepEqual(percents, percents.slice().sort((a, b) => a - b), '进度百分比不得回退');
+  });
+
+  await test('同步失败上报失败终态进度', async () => {
+    const e5 = createEnv();
+    await BS.config.save({
+      owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
+      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
+    });
+    const events = [];
+    BS.sync.setProgressHandler(p => { events.push(p); return Promise.resolve(); });
+    globalThis.fetch = async () => { throw new Error('offline'); };
+    const r = await BS.sync.runSync();
+    BS.sync.setProgressHandler(null);
+    assert.equal(r.ok, false);
+    const last = events[events.length - 1];
+    assert.equal(last.percent, 100);
+    assert.equal(last.state, 'failed');
+    assert.match(last.detail, /offline/);
+  });
+
   console.log(`\n完成：${passed} 项通过`);
 }
 
