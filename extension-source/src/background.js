@@ -88,7 +88,9 @@
   function setupAlarm(cfg) {
     if (!api.alarms) return Promise.resolve();
     return api.clearAlarm(ALARM_NAME).then(function () {
-      if (!cfg.autoSync) return undefined;
+      // 默认零写入：未显式开启、配置不完整或配置非法时，绝不建立自动同步闹钟。
+      if (!cfg || cfg.autoSync !== true || !config.isConfigured(cfg)) return undefined;
+      if (!config.validate(cfg).valid) return undefined;
       var minutes = Math.max(1, Math.min(1440, Number(cfg.syncIntervalMinutes) || 15));
       return api.createAlarm(ALARM_NAME, { periodInMinutes: minutes, delayInMinutes: minutes });
     }).catch(function () { /* ignore */ });
@@ -97,6 +99,8 @@
   var debouncedLocalChange = util.debounce(function () {
     if (sync.applying) return; // 同步引擎写入本地书签时不回环触发。
     config.load().then(function (cfg) {
+      // 未完成配置前，本地书签变化也不写任何状态。
+      if (!config.isConfigured(cfg)) return undefined;
       if (cfg.autoSync) return doSync('bookmark-change');
       // 自动同步关闭时只写轻量状态，不加载/解析完整书签树。
       return sync.loadState().then(function (state) {
@@ -124,7 +128,7 @@
     events.alarm.addListener(function (alarm) {
       if (!alarm || alarm.name !== ALARM_NAME) return;
       config.load().then(function (cfg) {
-        if (cfg.autoSync) return doSync('alarm');
+        if (cfg.autoSync && config.isConfigured(cfg)) return doSync('alarm');
         return undefined;
       }).catch(function () { /* ignore */ });
     });
@@ -132,17 +136,9 @@
 
   if (events.installed) {
     events.installed.addListener(function () {
-      sync.loadState().then(function (state) {
-        if (!state.deviceId) {
-          state.deviceId = util.uuid();
-          return sync.saveState(state).then(function () { return state; });
-        }
-        return state;
-      }).then(function (state) {
-        return config.save({ deviceId: state.deviceId });
-      }).then(function (cfg) {
-        return setupAlarm(cfg);
-      }).then(function () { return refreshBadge(); }).catch(function () { /* ignore */ });
+      // 安装后不写任何数据：不生成 deviceId、不创建闹钟、不触发同步。
+      // deviceId 在首次真实同步时按需生成，避免安装即产生存储写入。
+      return refreshBadge();
     });
   }
 
@@ -158,7 +154,7 @@
         var type = message && message.type;
         try {
           if (type === 'PING') {
-            sendResponse({ ok: true, version: '0.3.2' });
+            sendResponse({ ok: true, version: '0.3.3' });
             return;
           }
           if (type === 'GET_STATUS') {
@@ -204,7 +200,17 @@
               return;
             }
             var client = new BS.GitHubClient(testCfg.token, testCfg.owner, testCfg.repo, testCfg.branch, testCfg.path);
+            // 只读预检：不写入任何仓库数据。先核对仓库可访问性与写权限，再尝试读取同步文件。
             var info = await client.checkAccess();
+            if (info.permissions && info.permissions.push === false) {
+              sendResponse({
+                ok: false,
+                info: info,
+                error: '令牌对此仓库没有写权限（GitHub 返回 permissions.push=false）。' + util.authHint(testCfg.token, 403),
+                warnings: check.warnings
+              });
+              return;
+            }
             var fileInfo = null;
             try { fileInfo = await client.readFile(); }
             catch (e) { if (!e || e.status !== 404) throw e; }
