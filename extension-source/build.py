@@ -17,6 +17,7 @@ Chrome 121+ 会忽略 MV3 manifest 中的 background.scripts，Firefox 使用 sc
 """
 import json
 import shutil
+import struct
 import zipfile
 from pathlib import Path
 
@@ -68,11 +69,42 @@ def cleanup_legacy() -> None:
             z.unlink()
 
 
+def png_size(path: Path) -> tuple[int, int]:
+    with path.open("rb") as fh:
+        header = fh.read(24)
+    assert header[:8] == b"\x89PNG\r\n\x1a\n", f"不是 PNG 文件：{path.name}"
+    return struct.unpack(">II", header[16:24])
+
+
+def validate_icons(manifest: dict) -> None:
+    """确保清单引用的图标齐全，且声明尺寸与 PNG 实际尺寸一致。"""
+    refs = list(manifest.get("icons", {}).values())
+    refs += list(manifest["action"].get("default_icon", {}).values())
+    for item in manifest["action"].get("theme_icons", []):
+        refs += [item["light"], item["dark"]]
+    assert refs, "manifest 未声明任何图标"
+
+    for rel in set(refs):
+        path = SRC / rel
+        assert path.is_file(), f"缺少图标文件：{rel}"
+
+    for section in (manifest.get("icons", {}), manifest["action"].get("default_icon", {})):
+        for size_text, rel in section.items():
+            expected = int(size_text)
+            assert png_size(SRC / rel) == (expected, expected), f"图标尺寸不符：{rel} 应为 {size_text}x{size_text}"
+
+    for item in manifest["action"].get("theme_icons", []):
+        expected = (item["size"], item["size"])
+        assert png_size(SRC / item["light"]) == expected
+        assert png_size(SRC / item["dark"]) == expected
+
+
 def main() -> None:
     manifest = json.loads((SRC / "manifest.base.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"] == 3, "统一包必须使用 Manifest V3"
     assert "service_worker" in manifest["background"], "缺少 Chromium 后台声明"
     assert "scripts" in manifest["background"], "缺少 Firefox 后台声明"
+    validate_icons(manifest)
 
     DIST.mkdir(parents=True, exist_ok=True)
     cleanup_legacy()
