@@ -91,16 +91,34 @@
     });
   }
 
-  function fillForm(cfg) {
+  function fillForm(cfg, draft) {
+    var source = draft ? Object.assign({}, cfg, draft) : cfg;
     FIELDS.forEach(function (key) {
       var el = $(key);
       if (!el) return;
-      if (el.type === 'checkbox') el.checked = !!cfg[key];
-      else el.value = cfg[key] == null ? '' : String(cfg[key]);
+      if (el.type === 'checkbox') el.checked = !!source[key];
+      else el.value = source[key] == null ? '' : String(source[key]);
     });
-    $('token').value = cfg.token || ''; // 后台返回脱敏串；未编辑则不覆盖真实 token
-    tokenEdited = false;
+    // 草稿中的 token 是用户真实输入，需标记已编辑以便再次保存时提交。
+    var hasDraftToken = !!(draft && Object.prototype.hasOwnProperty.call(draft, 'token'));
+    $('token').value = hasDraftToken ? draft.token : (cfg.token || '');
+    tokenEdited = hasDraftToken;
     $('btnToggleToken').textContent = '显示';
+  }
+
+  function renderDraft(hasDraft) {
+    $('draftNotice').className = hasDraft ? 'notice' : 'notice hidden';
+  }
+
+  function renderProgress(p) {
+    if (!p) return;
+    var box = $('progressBox');
+    box.className = 'progress-box' + (p.state === 'failed' ? ' failed' : p.state === 'success' ? ' success' : '');
+    var percent = Math.max(0, Math.min(100, Number(p.percent) || 0));
+    $('progressPhase').textContent = p.phase || '同步中';
+    $('progressPercent').textContent = percent + '%';
+    $('progressBar').style.width = percent + '%';
+    $('progressDetail').textContent = p.detail || (p.state === 'failed' ? '同步失败' : '正在同步…');
   }
 
   function collectForm() {
@@ -135,7 +153,8 @@
   function refresh() {
     return send({ type: 'GET_STATUS' }).then(function (res) {
       if (!res.ok) { toast(res.error, 'error'); return; }
-      fillForm(res.config);
+      fillForm(res.config, res.draft);
+      renderDraft(res.hasDraft);
       renderStatus(res.state);
       renderBackups(res.backups);
     });
@@ -147,7 +166,12 @@
     // 后台同步完成后主动推送状态；不再每 5 秒轮询。
     if (global.BS.api.events && global.BS.api.events.message) {
       global.BS.api.events.message.addListener(function (message) {
-        if (message && message.type === 'STATUS') {
+        if (!message) return;
+        if (message.type === 'SYNC_PROGRESS') {
+          renderProgress(message);
+          return;
+        }
+        if (message.type === 'STATUS') {
           renderStatus({
             lastStatus: message.status,
             lastMessage: message.message,
@@ -169,8 +193,18 @@
       var btn = this;
       withBusy(btn, function () {
         return send({ type: 'SAVE_CONFIG', config: collectForm() }).then(function (res) {
-          toast(res.ok ? '配置已保存' : ('保存失败：' + res.error), res.ok ? 'ok' : 'error');
-          return refresh();
+          if (res.ok) {
+            toast('配置已保存并立即生效', 'ok');
+            return refresh();
+          }
+          if (res.draftSaved) {
+            // 草稿已落盘，刷新让表单显示已保存的暂存输入。
+            toast('输入已暂存，尚未生效：' + res.error, 'error');
+            return refresh();
+          }
+          // 真正的存储写入失败：不刷新表单，保留用户当前输入。
+          toast(res.error || '保存失败，请重试', 'error');
+          return undefined;
         });
       });
     });
@@ -198,9 +232,15 @@
     $('btnSync').addEventListener('click', function () {
       var btn = this;
       withBusy(btn, function () {
+        renderProgress({ percent: 0, phase: '准备同步', detail: '正在启动同步', state: 'running' });
         return send({ type: 'SYNC_NOW' }).then(function (res) {
-          toast(res.ok ? (res.status + '：' + res.message) : ('同步失败：' + res.error),
-            res.ok ? 'ok' : 'error');
+          if (res.ok) {
+            renderProgress({ percent: 100, phase: '同步完成', detail: res.message, state: 'success' });
+            toast(res.status + '：' + res.message, 'ok');
+          } else {
+            renderProgress({ percent: 100, phase: '同步失败', detail: res.error, state: 'failed' });
+            toast('同步失败：' + res.error, 'error');
+          }
           return refresh();
         });
       });
