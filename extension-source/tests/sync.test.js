@@ -15,13 +15,15 @@ function jsonRes(status, data) {
   return { ok: status >= 200 && status < 400, status, text: async () => JSON.stringify(data) };
 }
 
-function createEnv() {
+function createEnv(simulateCache) {
   const storage = Object.create(null);
   const nodes = Object.create(null);
   let counter = 0;
   let remote = null;
   let shaCounter = 0;
   const backups = [];
+  // 模拟浏览器/中间层按 GET URL 缓存响应；PUT 使用不同 URL，不会使该缓存失效。
+  const getCache = Object.create(null);
 
   const add = (id, title, parentId, url) => {
     nodes[id] = { id, title, parentId: parentId || null, url: url || null, children: [] };
@@ -92,8 +94,14 @@ function createEnv() {
     }
     const filePath = parts.slice(parts.indexOf('contents') + 1).join('/');
     if (init.method === 'GET') {
+      // 只有源码显式声明 no-store 时浏览器才会跳过缓存；否则命中过期 sha/content。
+      if (!simulateCache || !init || init.cache !== 'no-store') {
+        if (simulateCache && getCache[filePath]) return jsonRes(200, getCache[filePath]);
+      }
       if (!remote || filePath !== 'bookmarks.json') return jsonRes(404, { message: 'Not Found' });
-      return jsonRes(200, { sha: remote.sha, content: Buffer.from(remote.content, 'utf8').toString('base64') });
+      const payload = { sha: remote.sha, content: Buffer.from(remote.content, 'utf8').toString('base64') };
+      if (simulateCache && (!init || init.cache !== 'no-store')) getCache[filePath] = payload;
+      return jsonRes(200, payload);
     }
     if (init.method === 'PUT') {
       const body = JSON.parse(init.body);
@@ -323,6 +331,70 @@ async function main() {
     assert.equal(last.percent, 100);
     assert.equal(last.state, 'failed');
     assert.match(last.detail, /offline/);
+  });
+
+  await test('本地删除书签后连续同步不被缓存回滚且不产生 409', async () => {
+    // 启用 GET 缓存模拟：旧实现会缓存带 sha 的 GET 响应，PUT 无法失效，导致删除被回滚 + 陈旧 sha 触发 409。
+    const ec = createEnv(true);
+    await BS.config.save({
+      owner: 'o', repo: 'r', branch: 'main', path: 'bookmarks.json',
+      token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
+      conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
+    });
+    ec.addBookmark('1', '待删除项', 'https://del.example');
+    ec.addBookmark('1', '保留项', 'https://keep.example');
+    let r = await BS.sync.runSync();
+    assert.equal(r.status, 'pushed');
+
+    // 用户本地删除「待删除项」后同步：应推送删除，且不能被远端旧内容拉回。
+    const victim = Object.values(ec.nodes).find(n => n.title === '待删除项');
+    ec.api.remove(victim.id);
+    r = await BS.sync.runSync();
+    assert.equal(r.status, 'pushed', '本地删除应推送，实际=' + r.status);
+    let remoteTitles = JSON.parse(ec.remote.content).tree[0].children.map(n => n.title);
+    assert.ok(!remoteTitles.includes('待删除项'), '远端应删除该项');
+    assert.ok(!Object.values(ec.nodes).some(n => n.title === '待删除项'), '本地删除后不应立即被拉回');
+
+    // 紧接着再同步：正确实现应读到最新远端（noop），不会把已删项拉回。
+    r = await BS.sync.runSync();
+    assert.equal(r.status, 'noop', '连续第二次同步应为无变化，实际=' + r.status);
+    assert.ok(!Object.values(ec.nodes).some(n => n.title === '待删除项'), '已删除的书签不得被缓存回滚');
+
+    // 再新增一项并同步：不得因陈旧 sha 触发 409。
+    ec.addBookmark('1', '新增保留项', 'https://new.example');
+    r = await BS.sync.runSync();
+    assert.equal(r.ok, true, '不应出现 409 等失败，实际=' + (r.error || r.message));
+    assert.equal(r.status, 'pushed');
+    remoteTitles = JSON.parse(ec.remote.content).tree[0].children.map(n => n.title);
+    assert.ok(remoteTitles.includes('新增保留项'), '本地新增应同步到远端');
+    globalThis.BS.api = env.api;
+  });
+
+  await test('所有 GitHub 请求都声明禁用 HTTP 缓存', async () => {
+    const ec = createEnv();
+    await BS.config.save({
+      owner: 'o', repo: 'r', branch: 'main', path: 'bookmarks.json',
+      token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
+      conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
+    });
+    ec.addBookmark('1', '缓存断言项', 'https://cache.example');
+    const seen = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      seen.push({ url: String(url), init: init || {} });
+      return realFetch(url, init);
+    };
+    try {
+      await BS.sync.runSync();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.ok(seen.length > 0, '应发出 GitHub 请求');
+    seen.forEach(function (req) {
+      assert.equal(req.init.cache, 'no-store', 'fetch 必须设置 cache:no-store：' + req.url);
+      assert.ok(/no-store/.test(req.init.headers['Cache-Control'] || ''), '必须带 Cache-Control:no-store：' + req.url);
+    });
+    globalThis.BS.api = env.api;
   });
 
   console.log(`\n完成：${passed} 项通过`);
