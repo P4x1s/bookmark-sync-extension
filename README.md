@@ -1,4 +1,6 @@
-# Bookmark Sync via GitHub（低内存优化版 v0.3.4）
+# Bookmark Sync via GitHub（最终版 v0.3.4 · 低内存优化）
+
+> **✅ 最终版（Final Release）**：v0.3.4 已定义为本项目的最终稳定版本。功能已冻结，后续仅在发现阻断性缺陷（数据丢失、安全漏洞、无法加载）时发布修订；不再新增功能。当前唯一分发物为 `bookmark-sync-universal.zip`，对应 GitHub Release `v0.3.4`（Latest）。
 
 一个插件包同时兼容 **Chrome、Edge、Firefox** 及多数 Chromium 系浏览器。它通过使用者自己授权的 **GitHub 私有仓库**保存浏览器的**书签/收藏夹树**，实现新增、修改、删除、移动、重命名、层级与顺序的双向同步。
 
