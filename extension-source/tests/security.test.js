@@ -151,6 +151,40 @@ check('GitHub 客户端对每段路径做编码，避免 URL 注入', () => {
   assert.ok(!url.includes('..'));
 });
 
+check('默认配置不自动同步且未填写仓库', () => {
+  const d = BS.config.DEFAULT_CONFIG;
+  assert.equal(d.autoSync, false, '安装后默认不得自动同步');
+  assert.equal(d.owner, '');
+  assert.equal(d.repo, '');
+  assert.equal(d.token, '');
+  assert.equal(BS.config.isConfigured(d), false);
+  assert.equal(BS.config.isConfigured({ owner: 'a', repo: 'b', token: 't' }), true);
+});
+
+check('403 指引按令牌类型区分且不含令牌明文', () => {
+  const fine = BS.util.authHint('github_pat_abcdef', 403);
+  const classic = BS.util.authHint('ghp_abcdef', 403);
+  assert.match(fine, /Contents/);
+  assert.match(fine, /Read and write/);
+  assert.match(classic, /repo scope/);
+  assert.ok(!fine.includes('abcdef') && !classic.includes('abcdef'));
+  assert.equal(BS.util.authHint('ghp_x', 401), '');
+});
+
+await checkAsync('403 响应被转换成可操作错误且保留状态码', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => jsonRes(403, { message: 'Resource not accessible by personal access token' });
+  try {
+    const client = new BS.GitHubClient('github_pat_test', 'own', 'repo', 'main', 'bookmarks.json');
+    let error = null;
+    try { await client.checkAccess(); } catch (e) { error = e; }
+    assert.ok(error, '403 必须抛错');
+    assert.equal(error.status, 403);
+    assert.match(error.message, /Read and write/);
+    assert.ok(!error.message.includes('github_pat_test'));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 // ---------- 敏感数据 ----------
 console.log('\n敏感数据处理：');
 
