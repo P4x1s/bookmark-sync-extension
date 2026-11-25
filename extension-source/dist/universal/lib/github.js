@@ -43,7 +43,10 @@
         try { data = text ? JSON.parse(text) : null; } catch (e) { /* 非 JSON 响应 */ }
         if (!res.ok) {
           var msg = (data && data.message) ? data.message : text.slice(0, 200);
-          var err = new Error('GitHub API ' + res.status + ': ' + msg);
+          var hint = '';
+          if (res.status === 403) hint = '；' + util.authHint(self.token, 403);
+          else if (res.status === 401) hint = '；令牌无效或已过期，请重新生成后填入';
+          var err = new Error('GitHub API ' + res.status + ': ' + msg + hint);
           err.status = res.status;
           err.data = data;
           throw err;
@@ -71,12 +74,14 @@
 
   // 验证仓库存在、私有性与当前 token 的写权限。404 同时覆盖“不存在”和“无权访问私有仓库”。
   GitHubClient.prototype.checkAccess = function () {
+    var self = this;
     return this._request('GET', this._repoUrl()).then(function (data) {
       return {
         private: !!data.private,
         defaultBranch: data.default_branch,
         permissions: data.permissions || {},
-        fullName: data.full_name
+        fullName: data.full_name,
+        tokenKind: util.tokenKind(self.token)
       };
     });
   };
