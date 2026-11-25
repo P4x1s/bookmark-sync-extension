@@ -16,7 +16,8 @@
     branch: 'main',
     path: 'bookmarks.json',
     token: '',
-    autoSync: true,
+    // 安装后默认不自动写任何数据：只有用户保存完整配置并显式开启后才建立闹钟。
+    autoSync: false,
     syncIntervalMinutes: 15,
     debounceMs: 3000,
     // backup-then-local：冲突时备份远端后保留本地；prefer-remote：备份本地后采用远端。
@@ -47,6 +48,12 @@
     });
   };
 
+  // 是否具备真正可同步的最小配置。用于决定是否允许建立闹钟或触发后台同步。
+  config.isConfigured = function isConfigured(cfg) {
+    var c = cfg || {};
+    return !!(c.owner && c.repo && c.token);
+  };
+
   config.validate = function validate(cfg) {
     var errors = [];
     var warnings = [];
@@ -65,9 +72,9 @@
     if (!cfg.token) {
       errors.push('未填写 GitHub Personal Access Token');
     } else if (BS.util.isFineGrainedToken(cfg.token)) {
-      warnings.push('检测到 fine-grained PAT。GitHub Contents 写入可能返回 403，建议使用 classic PAT（ghp_ 开头，repo 权限）。');
+      warnings.push('检测到 fine-grained PAT：需对目标仓库授予 Contents: Read and write，否则同步写入会返回 403。');
     } else if (!BS.util.isClassicToken(cfg.token)) {
-      warnings.push('Token 格式未知；请使用 classic PAT（ghp_/gho_ 开头，repo scope）。');
+      warnings.push('Token 格式未知；请使用 classic PAT（ghp_ 开头，repo scope）或 fine-grained PAT（Contents: Read and write）。');
     }
     var minutes = Number(cfg.syncIntervalMinutes);
     if (!isFinite(minutes) || minutes < 1 || minutes > 1440) {
