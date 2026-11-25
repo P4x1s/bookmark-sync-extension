@@ -31,15 +31,24 @@
     toastTimer = setTimeout(function () { box.className = 'toast hidden'; }, kind === 'error' ? 15000 : 7000);
   }
 
+  // 状态图标统一为 16px 线性图标：相同 1.8 描边、圆角端点与 24 网格。
+  var STATUS_ICON = {
+    idle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
+    ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5"/><path d="M12 16.5h.01"/></svg>',
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8l8 8M16 8l-8 8"/></svg>',
+    dirty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/></svg>'
+  };
+
   var STATUS_VIEW = {
-    idle: ['○', 'idle', '尚未同步'],
-    noop: ['✓', 'ok', '无变化'],
-    pushed: ['✓', 'ok', '已推送本地变更'],
-    pulled: ['✓', 'ok', '已拉取远端变更'],
-    'conflict-local-kept': ['!', 'warn', '冲突：已备份远端，保留本地'],
-    'conflict-remote-kept': ['!', 'warn', '冲突：已备份本地，采用远端'],
-    dirty: ['•', 'dirty', '本地已变化，等待同步'],
-    error: ['!', 'error', '同步失败']
+    idle: ['idle', 'idle', '尚未同步'],
+    noop: ['ok', 'ok', '无变化'],
+    pushed: ['ok', 'ok', '已推送本地变更'],
+    pulled: ['ok', 'ok', '已拉取远端变更'],
+    'conflict-local-kept': ['warn', 'warn', '冲突：已备份远端，保留本地'],
+    'conflict-remote-kept': ['warn', 'warn', '冲突：已备份本地，采用远端'],
+    dirty: ['dirty', 'dirty', '本地已变化，等待同步'],
+    error: ['error', 'error', '同步失败']
   };
 
   function renderStatus(state) {
@@ -47,7 +56,7 @@
     var view = STATUS_VIEW[status] || [status.charAt(0).toUpperCase(), '', status];
     var card = $('statusCard');
     card.className = 'status-card ' + view[1];
-    $('statusGlyph').textContent = view[0];
+    $('statusGlyph').innerHTML = STATUS_ICON[view[0]] || STATUS_ICON.idle;
     $('statusTitle').textContent = view[2];
     $('statusDetail').textContent = (state && state.lastMessage) || '';
     $('statusMeta').textContent = state && state.lastSyncAt
