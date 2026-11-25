@@ -137,7 +137,7 @@ function createBrowserEnv(style) {
       onMessage: makeEvent('message'),
       onInstalled: makeEvent('installed'),
       onStartup: makeEvent('startup'),
-      getManifest: () => ({ version: '0.3.4' }),
+      getManifest: () => ({ version: '1.0.0' }),
       sendMessage: (message, cb) => { deliver(message).then(r => { if (cb) cb(r); }); },
     },
     storage: {
@@ -174,7 +174,7 @@ function createBrowserEnv(style) {
       onMessage: makeEvent('message'),
       onInstalled: makeEvent('installed'),
       onStartup: makeEvent('startup'),
-      getManifest: () => ({ version: '0.3.4' }),
+      getManifest: () => ({ version: '1.0.0' }),
       sendMessage: async message => deliver(message),
     },
     storage: {
@@ -352,7 +352,7 @@ async function main() {
     await checkAsync(style + ' PING / GET_STATUS 消息可用', async () => {
       const ping = await dispatch(env, { type: 'PING' });
       assert.equal(ping.ok, true);
-      assert.equal(ping.version, '0.3.4');
+      assert.equal(ping.version, '1.0.0');
       const status = await dispatch(env, { type: 'GET_STATUS' });
       assert.equal(status.ok, true);
       assert.ok(status.config.token === '' || status.config.token.includes('****'), 'token 未脱敏');

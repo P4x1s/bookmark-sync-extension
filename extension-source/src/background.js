@@ -167,7 +167,7 @@
         var type = message && message.type;
         try {
           if (type === 'PING') {
-            sendResponse({ ok: true, version: '0.3.4' });
+            sendResponse({ ok: true, version: '1.0.0' });
             return;
           }
           if (type === 'GET_STATUS') {
