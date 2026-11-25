@@ -74,7 +74,7 @@ bookmark-sync-extension/
 
 ### 3.1 准备 GitHub 私人仓库与令牌
 
-1. **同步仓库已创建：`P4x1s/bookmark-sync-vault`**（Private，默认分支 `main`，当前仅含一个说明用的 `README.md`）。地址：<https://github.com/P4x1s/bookmark-sync-vault>。插件默认已预置 owner / repo，无需手填；原 `P4x1s/bookmarks` 不再被插件引用，也未被改动。
+1. **先新建一个 Private 仓库**（默认分支 `main`，可为空）。插件不预置任何仓库信息，owner / repo 需自行填写；仓库内已有文件不会被删除或覆盖，如同步路径撞上已有文件，会先提交 `backups/initial-*.json` 快照。
 2. 生成 **classic PAT**：GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)。
    - 勾选 `repo`（私人仓库读写必需；已有 token 若具备 `repo` scope 可直接用）。
    - **不要使用 fine-grained PAT**：实测写 Contents 会返回 `403 Resource not accessible by personal access token`，即使能读能登录。
@@ -96,7 +96,7 @@ bookmark-sync-extension/
 
 ### 3.3 配置与首次同步
 
-1. 点击工具栏图标，只需填写 token；owner / repo 已预置为 `P4x1s` / `bookmarks`。
+1. 点击工具栏图标，填写 owner / repo / token（仓库信息不预置，需自行填写）。
 2. 点击 **测试连接**：应显示仓库为 Private、有写权限，并报告同步文件是否存在。
 3. 点击 **保存配置**，再点击 **立即同步**。
 4. 在第二个浏览器中加载同一个包，配置后「立即同步」拉取远端树（首次拉取会先留本地快照）。
@@ -208,7 +208,7 @@ python -c "import json; m=json.load(open('dist/universal/manifest.json',encoding
 > 必须在真实浏览器与真实私人仓库中完成；以下项目无法仅靠静态检查替代。
 
 1. **同包加载**：同一个 `dist/universal` 目录分别在 Chrome 与 Firefox 加载成功，后台页均正常启动。
-2. **连接验证**：预置仓库为 `P4x1s/bookmark-sync-vault`；填入 classic PAT 后测试连接应显示 Private、push 权限、`bookmarks.json` 不存在（首次同步会创建）。
+2. **连接验证**：填入自己的仓库与 classic PAT 后，测试连接应显示 Private、push 权限、`bookmarks.json` 不存在（首次同步会创建）。
 3. **原有文件保护**：若 `bookmarks.json` 已有非本插件内容，首次同步后确认 `backups/initial-*.json` 中存在原内容。
 4. **首次推送**：浏览器 A 添加 2 个书签 + 1 个文件夹并调整顺序 → 立即同步 → GitHub 上打开 `bookmarks.json` 核对层级、标题、URL、顺序。
 5. **跨浏览器拉取**：浏览器 B 立即同步 → 书签树与 A 一致。
