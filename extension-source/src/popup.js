@@ -27,7 +27,8 @@
     box.textContent = text;
     box.className = 'toast' + (kind ? ' ' + kind : '');
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { box.className = 'toast hidden'; }, 7000);
+    // 403 等授权故障的指引较长，错误提示保留更久，避免用户来不及阅读。
+    toastTimer = setTimeout(function () { box.className = 'toast hidden'; }, kind === 'error' ? 15000 : 7000);
   }
 
   var STATUS_VIEW = {
