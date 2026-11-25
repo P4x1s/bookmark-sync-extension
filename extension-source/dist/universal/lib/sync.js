@@ -410,7 +410,10 @@
         });
       }
 
-      var firstSync = !state.lastSyncAt && state.baseTree.length === 0;
+      // 是否已成功建立同步基准：失败路径也会写 lastSyncAt，不能用它判断。
+      // 只有 baseTree 与 remoteSha 同时为空才说明从未成功同步过，
+      // 否则「首次失败 → 修正配置重试」会被误判为双向冲突并反向覆盖远端。
+      var firstSync = state.baseTree.length === 0 && !state.remoteSha;
 
       // 首次同步且远端没有 bookmarks.json：无条件创建文件并推送完整本地书签树，
       // 即使本地树为空也要创建，保证仓库中存在可复用的同步文件。
