@@ -44,14 +44,15 @@ body::-webkit-scrollbar-thumb { background: #3a404b; border-radius: 8px; }
 .brand-icon {
   display: grid;
   place-items: center;
+  flex: none;
   width: 36px;
   height: 36px;
+  border: 1px solid rgba(255, 255, 255, .12);
   border-radius: 10px;
-  color: #fff;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  box-shadow: 0 6px 18px rgba(91, 156, 255, .25);
+  box-shadow: 0 6px 18px rgba(91, 156, 255, .22);
 }
-.brand-icon svg { width: 22px; height: 22px; }
+.brand-icon img { display: block; width: 22px; height: 22px; }
 
 .brand-title { font-size: 15px; font-weight: 650; letter-spacing: .2px; }
 .brand-sub { font-size: 10.5px; color: var(--muted); }
@@ -84,10 +85,10 @@ body::-webkit-scrollbar-thumb { background: #3a404b; border-radius: 8px; }
   flex: none;
   width: 30px; height: 30px;
   display: grid; place-items: center;
-  border-radius: 50%;
-  font-size: 16px; font-weight: 700;
+  border-radius: 9px;
   background: #313742; color: var(--muted);
 }
+.status-glyph svg { display: block; width: 16px; height: 16px; }
 .status-card.ok .status-glyph { background: rgba(55, 201, 139, .16); color: var(--ok); }
 .status-card.warn .status-glyph { background: rgba(255, 180, 84, .16); color: var(--warn); }
 .status-card.error .status-glyph { background: rgba(255, 107, 107, .16); color: var(--err); }
