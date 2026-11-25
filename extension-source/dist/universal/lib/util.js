@@ -67,16 +67,18 @@
     return value == null ? value : JSON.parse(JSON.stringify(value));
   };
 
+  // wait 支持函数形式，便于后台按最新配置动态取去抖时长。
   util.debounce = function debounce(fn, wait) {
     var timer = null;
     return function () {
       var self = this;
       var args = arguments;
       if (timer) clearTimeout(timer);
+      var ms = typeof wait === 'function' ? wait() : wait;
       timer = setTimeout(function () {
         timer = null;
         fn.apply(self, args);
-      }, wait);
+      }, ms);
     };
   };
 
