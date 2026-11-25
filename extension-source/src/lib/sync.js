@@ -18,6 +18,29 @@
   sync.BACKUP_KEY = BACKUP_KEY;
   sync.applying = false; // applyTreeToLocal 期间忽略本地变更事件，防止回环触发。
 
+  var progressHandler = null;
+
+  // 进度上报与消息推送解耦：后台注入 handler，测试可直接收集事件。
+  sync.setProgressHandler = function setProgressHandler(fn) {
+    progressHandler = typeof fn === 'function' ? fn : null;
+  };
+
+  function report(percent, phase, detail, state) {
+    if (typeof progressHandler !== 'function') return;
+    var payload = {
+      type: 'SYNC_PROGRESS',
+      percent: percent,
+      phase: phase,
+      detail: detail || '',
+      state: state || 'running',
+      at: new Date().toISOString()
+    };
+    try {
+      var ret = progressHandler(payload);
+      if (ret && typeof ret.catch === 'function') ret.catch(function () { /* 忽略无接收方的消息 */ });
+    } catch (e) { /* 进度失败不得中断同步 */ }
+  }
+
   // 常规状态轻量：不再内嵌完整备份树（旧版最多 5 份树常驻，是内存主要来源）。
   sync.loadState = function loadState() {
     return BS.api.storageGet([STATE_KEY]).then(function (data) {
@@ -261,6 +284,7 @@
     state.lastSyncAt = new Date().toISOString();
     state.lastStatus = status;
     state.lastMessage = message + (warnings && warnings.length ? '（提示：' + warnings.slice(0, 3).join('；') + '）' : '');
+    report(100, 'done', state.lastMessage, 'success');
     return sync.saveState(state).then(function () {
       BS.api.sendMessage({
         type: 'STATUS',
@@ -290,11 +314,18 @@
     var warnings = [];
     var keep = 1;
 
-    return BS.config.load().then(function (loadedCfg) {
+    return Promise.resolve().then(function () {
+      report(5, 'config', '检查同步配置');
+      return BS.config.loadDraft();
+    }).then(function (draft) {
+      if (draft) throw new Error('存在尚未生效的暂存配置，请先修正并保存');
+      return BS.config.load();
+    }).then(function (loadedCfg) {
       cfg = loadedCfg;
       var check = BS.config.validate(cfg);
       if (!check.valid) throw new Error('配置无效：' + check.errors.join('；'));
       keep = cfg.lowMemoryMode ? 1 : Math.max(1, Number(cfg.backupCount) || 3);
+      report(15, 'local', '读取浏览器书签');
       return sync.loadState();
     }).then(function (loadedState) {
       state = loadedState;
@@ -305,6 +336,7 @@
       localTree = tree;
       var problems = BS.model.validateTree(localTree);
       if (problems.length) warnings = warnings.concat(problems);
+      report(30, 'remote', '读取仓库同步文件');
       return client.readFile();
     }).then(function (file) {
       remoteFile = file;
@@ -325,6 +357,7 @@
       if (e && e.status === 404) {
         remoteFile = null;
         remoteTree = null;
+        report(50, 'compare', '同步文件不存在，准备创建并全量同步');
         return undefined;
       }
       throw e;
@@ -338,6 +371,7 @@
           tree: localTree
         });
         var sha = remoteFile ? remoteFile.sha : null;
+        report(80, 'write', remoteFile ? '更新 GitHub 同步文件' : '创建 GitHub 同步文件');
         return client.writeFile(content, sha, 'sync bookmarks from ' + state.deviceId, cfg.path).then(function (res) {
           state.baseTree = localTree; // 直接复用引用，不再深拷贝整棵树
           state.remoteSha = (res && res.content && res.content.sha) ? res.content.sha : sha;
@@ -348,8 +382,10 @@
       }
 
       function pullRemote(status, message, backupReason, skipBackup) {
+        if (!skipBackup) report(60, 'backup', '备份当前本地书签');
         var backupChain = skipBackup ? Promise.resolve() : localBackup(localTree, backupReason, keep);
         return backupChain.then(function () {
+          report(80, 'apply', '更新本地书签');
           return sync.applyTreeToLocal(remoteTree, state);
         }).then(function (w) {
           warnings = warnings.concat(w || []);
@@ -363,8 +399,11 @@
         });
       }
 
+      report(50, 'compare', '比较本地与远端书签差异');
+
       // 仓库中已有同名文件但不是本插件格式：先原样备份，再写入，绝不删除现有内容。
       if (remoteIncompatible && remoteFile) {
+        report(60, 'backup', '备份仓库原有文件');
         return remoteBackupRaw(client, remoteFile.content, 'existing-file').then(function (path) {
           state.remoteBackupPath = path;
           return pushLocal('pushed', '仓库原有文件已备份到 ' + path + '，随后写入同步文件');
@@ -372,6 +411,13 @@
       }
 
       var firstSync = !state.lastSyncAt && state.baseTree.length === 0;
+
+      // 首次同步且远端没有 bookmarks.json：无条件创建文件并推送完整本地书签树，
+      // 即使本地树为空也要创建，保证仓库中存在可复用的同步文件。
+      if (firstSync && !remoteFile) {
+        report(70, 'create', '创建 bookmarks.json');
+        return pushLocal('pushed', '首次同步：已创建 bookmarks.json 并完整同步本地书签');
+      }
       var localChanged = !util.deepEqual(state.baseTree, localTree);
       var remoteChanged = remoteFile
         ? !util.deepEqual(state.baseTree, remoteTree)
@@ -391,6 +437,7 @@
 
       if (localChanged && remoteChanged && !firstSync) {
         if (cfg.conflictStrategy === 'prefer-remote') {
+          report(60, 'backup', '检测到冲突，备份本地书签');
           return localBackup(localTree, 'conflict-before-remote', keep).then(function () {
             return remoteBackup(client, localTree, 'conflict-local');
           }).then(function (path) {
@@ -399,6 +446,7 @@
               '检测到双向冲突：已备份本地并采用远端，备份 ' + path, 'conflict-before-remote', true);
           });
         }
+        report(60, 'backup', '检测到冲突，备份远端书签');
         return localBackup(remoteTree, 'conflict-remote-snapshot', keep).then(function () {
           return remoteBackup(client, remoteTree, 'conflict-remote');
         }).then(function (path) {
@@ -420,9 +468,11 @@
       localTree = null;
       return finish(state, 'noop', '远端文件不存在且本地无变更', warnings);
     }).catch(function (e) {
+      var message = '同步失败：' + (e && e.message ? e.message : e);
+      report(100, 'failed', message, 'failed');
       if (state) {
         state.lastStatus = 'error';
-        state.lastMessage = '同步失败：' + (e && e.message ? e.message : e);
+        state.lastMessage = message;
         state.lastSyncAt = new Date().toISOString();
         return sync.saveState(state).then(function () {
           BS.api.sendMessage({ type: 'STATUS', status: 'error', message: state.lastMessage, at: state.lastSyncAt })
