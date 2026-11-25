@@ -8,6 +8,8 @@
   var BS = global.BS = global.BS || {};
 
   var CONFIG_KEY = 'bookmarkSync.config';
+  // 草稿键：用户输入尚未通过校验时仍立即落盘，避免关闭弹窗后丢失填写内容。
+  var DRAFT_KEY = 'bookmarkSync.draft';
 
   var DEFAULT_CONFIG = {
     // 仓库信息由使用者自行填写；仅支持 classic PAT（repo 权限）授权。
@@ -31,6 +33,7 @@
   var config = BS.config = {};
 
   config.CONFIG_KEY = CONFIG_KEY;
+  config.DRAFT_KEY = DRAFT_KEY;
   config.DEFAULT_CONFIG = DEFAULT_CONFIG;
 
   config.load = function load() {
@@ -39,13 +42,34 @@
     });
   };
 
-  config.save = function save(patch) {
+  config.loadDraft = function loadDraft() {
+    return BS.api.storageGet([DRAFT_KEY]).then(function (data) {
+      var draft = data && data[DRAFT_KEY];
+      return (draft && typeof draft === 'object' && !Array.isArray(draft)) ? draft : null;
+    });
+  };
+
+  // 保存草稿：只持久化用户输入，不作为生效配置，不触发同步或闹钟。
+  config.saveDraft = function saveDraft(patch) {
+    var obj = {};
+    obj[DRAFT_KEY] = patch || {};
+    return BS.api.storageSet(obj).then(function () { return patch || {}; });
+  };
+
+  // 生效保存：一次存储写入同时更新配置并清除草稿，避免中途失败留下不一致状态。
+  config.commit = function commit(patch) {
     return config.load().then(function (current) {
       var next = Object.assign({}, current, patch || {});
       var obj = {};
       obj[CONFIG_KEY] = next;
+      obj[DRAFT_KEY] = null;
       return BS.api.storageSet(obj).then(function () { return next; });
     });
+  };
+
+  // 保留供内部/测试使用：不附带清草稿语义。
+  config.save = function save(patch) {
+    return config.commit(patch);
   };
 
   // 是否具备真正可同步的最小配置。用于决定是否允许建立闹钟或触发后台同步。
