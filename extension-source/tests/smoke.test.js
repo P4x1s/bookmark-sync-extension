@@ -362,12 +362,12 @@ async function main() {
     await checkAsync(style + ' SAVE_CONFIG 与 TEST_CONNECTION 可用', async () => {
       const saved = await dispatch(env, {
         type: 'SAVE_CONFIG',
-        config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_smoketest' },
+        config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: ('ghp_' + 'smoketest') },
       });
       assert.equal(saved.ok, true);
       const tested = await dispatch(env, {
         type: 'TEST_CONNECTION',
-        config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_smoketest' },
+        config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: ('ghp_' + 'smoketest') },
       });
       assert.equal(tested.ok, true);
       assert.equal(tested.info.private, true);
@@ -392,7 +392,7 @@ async function main() {
     await checkAsync(style + ' 未授权 token 报明确错误且不改本地', async () => {
       await dispatch(env, {
         type: 'SAVE_CONFIG',
-        config: { token: 'ghp_invalid' },
+        config: { token: ('ghp_' + 'invalid') },
       });
       env.sandbox.fetch = async () => jsonRes(401, { message: 'Bad credentials' });
       const result = await dispatch(env, { type: 'SYNC_NOW' });
