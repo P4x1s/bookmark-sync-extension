@@ -20,7 +20,7 @@
         <div class="brand-sub">GitHub 私人仓库双向同步</div>
       </div>
     </div>
-    <span class="version">v0.3.2</span>
+    <span class="version">v0.3.3</span>
   </div>
 
   <div id="statusCard" class="status-card idle">
@@ -61,11 +61,11 @@
     </div>
     <label>Personal Access Token
       <span class="token-row">
-        <input id="token" type="password" placeholder="ghp_…（classic PAT，repo 权限）" autocomplete="off" spellcheck="false">
+        <input id="token" type="password" placeholder="classic PAT（repo）或 fine-grained PAT（Contents 读写）" autocomplete="off" spellcheck="false">
         <button id="btnToggleToken" class="btn btn-icon" type="button" aria-label="显示或隐藏令牌">显示</button>
       </span>
     </label>
-    <p class="hint">令牌仅保存在本扩展的本地存储。仓库中已有文件不会删除，首次写入前会备份原内容。</p>
+    <p class="hint">令牌仅保存在本扩展的本地存储。安装后默认不写入任何数据；填写完整配置并点击「立即同步」后才会写入。fine-grained PAT 必须把 Contents 设为 Read and write，classic PAT 需勾选 repo scope。</p>
   </section>
 
   <section class="card">
