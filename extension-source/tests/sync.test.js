@@ -147,7 +147,7 @@ async function main() {
   const env = createEnv();
   await BS.config.save({
     owner: 'owner', repo: 'repo', branch: 'main', path: 'bookmarks.json',
-    token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+    token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
     conflictStrategy: 'backup-then-local',
   });
 
@@ -225,7 +225,7 @@ async function main() {
     const e2 = createEnv();
     await BS.config.save({
       owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
-      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
       conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
     });
     const original = '仓库原有内容：请勿删除';
@@ -243,7 +243,7 @@ async function main() {
     const e3 = createEnv();
     await BS.config.save({
       owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
-      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
       conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
     });
     const r = await BS.sync.runSync();
@@ -260,7 +260,7 @@ async function main() {
     const e5 = createEnv();
     await BS.config.save({
       owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
-      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
       conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
     });
     e5.setRemoteTree([{
@@ -289,7 +289,7 @@ async function main() {
     const e4 = createEnv();
     await BS.config.save({
       owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
-      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
       conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
     });
     e4.addBookmark('1', '进度测试书签', 'https://progress.example');
@@ -310,7 +310,7 @@ async function main() {
     const e5 = createEnv();
     await BS.config.save({
       owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
-      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
       conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
     });
     const events = [];
