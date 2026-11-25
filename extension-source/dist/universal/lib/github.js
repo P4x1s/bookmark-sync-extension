@@ -21,7 +21,11 @@
     var headers = {
       'Accept': 'application/vnd.github+json',
       'Authorization': 'Bearer ' + this.token,
-      'X-GitHub-Api-Version': '2022-11-28'
+      'X-GitHub-Api-Version': '2022-11-28',
+      // 禁止中间层与浏览器缓存：Contents API 的 sha/content 必须每次都是最新值，
+      // 否则本地删除会被过期缓存的远端内容重新拉回，并用陈旧 sha 触发 409。
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache'
     };
     if (extra) {
       Object.keys(extra).forEach(function (k) { headers[k] = extra[k]; });
@@ -33,6 +37,7 @@
     var self = this;
     var init = {
       method: method,
+      cache: 'no-store', // fetch 层再禁一次缓存，双重保险（GET 读取必须拿到真实 sha）。
       headers: self._headers(body ? { 'Content-Type': 'application/json' } : null)
     };
     if (body) init.body = JSON.stringify(body);
