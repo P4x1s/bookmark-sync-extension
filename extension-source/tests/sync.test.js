@@ -215,16 +215,16 @@ async function main() {
     assert.equal(list.length, 1, '低内存模式应只保留 1 份快照');
   });
 
-  await test('默认仓库为 P4x1s/bookmark-sync-vault 且低内存开启', async () => {
-    assert.equal(BS.config.DEFAULT_CONFIG.owner, 'P4x1s');
-    assert.equal(BS.config.DEFAULT_CONFIG.repo, 'bookmark-sync-vault');
+  await test('默认仓库为空、由使用者填写且低内存开启', async () => {
+    assert.equal(BS.config.DEFAULT_CONFIG.owner, '');
+    assert.equal(BS.config.DEFAULT_CONFIG.repo, '');
     assert.equal(BS.config.DEFAULT_CONFIG.lowMemoryMode, true);
   });
 
   await test('远端已有非本格式文件 => 原内容先备份再写入', async () => {
     const e2 = createEnv();
     await BS.config.save({
-      owner: 'P4x1s', repo: 'bookmark-sync-vault', branch: 'main', path: 'bookmarks.json',
+      owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
       token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
       conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
     });
