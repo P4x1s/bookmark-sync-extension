@@ -281,7 +281,8 @@ await checkAsync('网络异常返回明确错误且不破坏本地书签', async
 // ---------- 后台消息边界 ----------
 console.log('\n后台消息边界：');
 
-async function loadBackground() {
+async function loadBackground(options) {
+  const opts = options || {};
   const storage = Object.create(null);
   const listeners = [];
   const sandbox = {
@@ -304,7 +305,7 @@ async function loadBackground() {
       },
       storage: { local: {
         get: async keys => { const o = Object.create(null); (keys || []).forEach(k => { if (storage[k] !== undefined) o[k] = storage[k]; }); return o; },
-        set: async obj => { Object.assign(storage, obj); }, remove: async () => {},
+        set: async obj => { if (opts.failSet) throw new Error('storage unavailable'); Object.assign(storage, obj); }, remove: async () => {},
       } },
       alarms: { onAlarm: { addListener() {} }, create: async () => {}, clear: async () => {} },
       action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
@@ -331,6 +332,53 @@ await checkAsync('SAVE_CONFIG 拒绝路径穿越与非法令牌类型', async ()
   const r = await bg.send({ type: 'SAVE_CONFIG', config: { path: '../../evil', token: 12345, syncIntervalMinutes: -1 } });
   assert.equal(r.ok, false, '非法配置不应被保存：' + JSON.stringify(r));
   assert.equal(bg.storage['bookmarkSync.config'], undefined);
+});
+
+await checkAsync('无效输入立即写入草稿，不污染生效配置', async () => {
+  const bg = await loadBackground();
+  const r = await bg.send({ type: 'SAVE_CONFIG', config: { owner: 'example', repo: 'private-repo', path: '../evil', token: '' } });
+  assert.equal(r.ok, false);
+  assert.equal(r.draftSaved, true);
+  assert.equal(bg.storage['bookmarkSync.config'], undefined);
+  const draft = bg.storage['bookmarkSync.draft'];
+  assert.equal(draft.path, '../evil');
+  assert.equal(draft.owner, 'example');
+});
+
+await checkAsync('有效保存立即清除草稿', async () => {
+  const bg = await loadBackground();
+  bg.storage['bookmarkSync.draft'] = { owner: 'old', repo: 'old' };
+  const r = await bg.send({
+    type: 'SAVE_CONFIG',
+    config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_x' },
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.saved, true);
+  assert.equal(bg.storage['bookmarkSync.draft'], null);
+  assert.equal(bg.storage['bookmarkSync.config'].owner, 'example');
+});
+
+await checkAsync('存储写入失败明确返回保存失败', async () => {
+  const bg = await loadBackground({ failSet: true });
+  const r = await bg.send({
+    type: 'SAVE_CONFIG',
+    config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_x' },
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.saveFailed, true);
+  assert.match(r.error, /保存失败/);
+  assert.equal(bg.storage['bookmarkSync.config'], undefined);
+});
+
+await checkAsync('存在草稿时同步被阻止，不访问仓库', async () => {
+  const bg = await loadBackground();
+  bg.storage['bookmarkSync.config'] = {
+    owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_x',
+  };
+  bg.storage['bookmarkSync.draft'] = { path: '../evil' };
+  const r = await bg.send({ type: 'SYNC_NOW' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /暂存配置/);
 });
 
 await checkAsync('SET_CONFLICT 仅接受预定义策略', async () => {
