@@ -272,7 +272,12 @@ async function main() {
 
   check('manifest 引用的全部文件存在', () => {
     const m = JSON.parse(read('dist/universal/manifest.json'));
-    const refs = [m.background.service_worker, ...m.background.scripts, m.action.default_popup];
+    const iconRefs = [
+      ...Object.values(m.icons || {}),
+      ...Object.values(m.action.default_icon || {}),
+      ...(m.action.theme_icons || []).flatMap(item => [item.light, item.dark]),
+    ];
+    const refs = [m.background.service_worker, ...m.background.scripts, m.action.default_popup, ...iconRefs];
     refs.forEach(r => assert.ok(fs.existsSync(path.join(DIST, r)), '缺少文件 ' + r));
     const html = read('dist/universal/popup.html');
     [...html.matchAll(/(?:src|href)="([^"]+)"/g)].forEach(mm => {
@@ -280,10 +285,43 @@ async function main() {
     });
   });
 
+  check('图标覆盖多尺寸并包含深浅主题变体', () => {
+    const m = JSON.parse(read('dist/universal/manifest.json'));
+    const sorted = values => values.map(Number).sort((a, b) => a - b);
+    assert.deepEqual(sorted(Object.keys(m.icons || {})), [16, 32, 48, 64, 128]);
+    assert.deepEqual(sorted(Object.keys(m.action.default_icon || {})), [16, 24, 32, 48, 64, 128]);
+
+    const entries = [
+      ...Object.entries(m.icons || {}),
+      ...Object.entries(m.action.default_icon || {}),
+    ];
+    entries.forEach(([size, rel]) => {
+      assert.equal(size, String(size), '尺寸键必须为字符串');
+      const buf = fs.readFileSync(path.join(DIST, rel));
+      assert.equal(buf.readUInt32BE(16), Number(size), rel + ' 宽度不符');
+      assert.equal(buf.readUInt32BE(20), Number(size), rel + ' 高度不符');
+    });
+
+    const themes = m.action.theme_icons || [];
+    assert.deepEqual(themes.map(t => t.size).sort((a, b) => a - b), [16, 32]);
+    themes.forEach(t => {
+      assert.match(t.dark, /icon-on-light-\d+\.png$/, 'dark 槽应使用浅色工具栏适配图');
+      assert.match(t.light, /icon-on-dark-\d+\.png$/, 'light 槽应使用深色工具栏适配图');
+      [t.light, t.dark].forEach(rel => {
+        const buf = fs.readFileSync(path.join(DIST, rel));
+        assert.equal(buf.readUInt32BE(16), t.size);
+        assert.equal(buf.readUInt32BE(20), t.size);
+      });
+    });
+  });
+
   check('dist 与 src 源码逐字节一致（manifest 除外）', () => {
     const files = ['background.js', 'popup.html', 'popup.css', 'popup.js',
       'lib/util.js', 'lib/api.js', 'lib/config.js', 'lib/github.js', 'lib/model.js', 'lib/sync.js'];
     files.forEach(f => assert.equal(read('dist/universal/' + f), read('src/' + f), '不一致：' + f));
+    fs.readdirSync(path.join(SRC, 'icons')).forEach(f => {
+      assert.equal(read('dist/universal/icons/' + f), read('src/icons/' + f), '不一致：icons/' + f);
+    });
   });
 
   check('zip 内容与 dist 文件集合一致', () => {
@@ -383,6 +421,21 @@ async function main() {
     await new Promise(r => setTimeout(r, 3200));
     assert.equal(env.store['bookmarkSync.state'], undefined);
     assert.equal(env.requests.filter(r => r.init && r.init.method === 'PUT').length, 0);
+  });
+
+  await checkAsync('debounceMs 配置项实际影响书签变化去抖时长', async () => {
+    const env = await freshBackground();
+    await dispatch(env, {
+      type: 'SAVE_CONFIG',
+      config: {
+        owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
+        token: 'ghp_x', debounceMs: 50, autoSync: false,
+      },
+    });
+    env.listeners.created.forEach(fn => fn({ id: 'x' }));
+    await new Promise(r => setTimeout(r, 200));
+    assert.ok(env.store['bookmarkSync.state'], '短去抖后应写入 dirty 状态');
+    assert.equal(env.store['bookmarkSync.state'].lastStatus, 'dirty');
   });
 
   await checkAsync('未配置时手动同步被拒绝且不发请求', async () => {
