@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmark Sync 图标预览</title>
+  <style>
+    :root {
+      --ink: #20232a;
+      --muted: #6f7887;
+      --line: rgba(40, 50, 80, .12);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px;
+      background: #eef1f7;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    p { margin: 0 0 22px; color: var(--muted); font-size: 13px; }
+    .panel {
+      display: grid;
+      gap: 18px;
+      margin-bottom: 18px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #f7f9fc;
+    }
+    .panel.dark {
+      border-color: rgba(255, 255, 255, .1);
+      background: #1b1e26;
+      color: #eef1f5;
+    }
+    .panel h2 {
+      margin: 0 0 4px;
+      font-size: 13px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      opacity: .72;
+    }
+    .row {
+      display: flex;
+      align-items: flex-end;
+      gap: 26px;
+      flex-wrap: wrap;
+    }
+    .item { display: grid; justify-items: center; gap: 9px; min-width: 64px; }
+    .item span { font-size: 11px; color: var(--muted); }
+    .panel.dark .item span { color: #9aa3b2; }
+    img { display: block; image-rendering: auto; }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px 10px 10px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #5b9cff, #7b6cff);
+      color: #fff;
+      box-shadow: 0 8px 22px rgba(91, 156, 255, .28);
+    }
+    .brand img { width: 22px; height: 22px; }
+    .brand b { font-size: 14px; font-weight: 650; }
+    .status-samples { display: flex; gap: 12px; }
+    .status-glyph {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: rgba(120, 130, 160, .16);
+    }
+    .status-glyph svg { width: 16px; height: 16px; }
+    .ok { color: #37c98b; }
+    .warn { color: #ffb454; }
+    .error { color: #ff6b6b; }
+    .dirty { color: #5b9cff; }
+    .idle { color: #9aa3b2; }
+  </style>
+</head>
+<body>
+  <h1>Bookmark Sync 图标预览</h1>
+  <p>同一「云 + 双向箭头」语义；16–128px 多尺寸、圆角/描边/配色统一，并提供浅色与深色工具栏变体。</p>
+
+  <section class="panel">
+    <h2>默认工具栏图标 · 浅色背景</h2>
+    <div class="row">
+      <div class="item"><img src="src/icons/icon-16.png" width="16" height="16" alt=""><span>16px</span></div>
+      <div class="item"><img src="src/icons/icon-24.png" width="24" height="24" alt=""><span>24px</span></div>
+      <div class="item"><img src="src/icons/icon-32.png" width="32" height="32" alt=""><span>32px</span></div>
+      <div class="item"><img src="src/icons/icon-48.png" width="48" height="48" alt=""><span>48px</span></div>
+      <div class="item"><img src="src/icons/icon-64.png" width="64" height="64" alt=""><span>64px</span></div>
+      <div class="item"><img src="src/icons/icon-128.png" width="128" height="128" alt=""><span>128px</span></div>
+    </div>
+  </section>
+
+  <section class="panel dark">
+    <h2>默认工具栏图标 · 深色背景</h2>
+    <div class="row">
+      <div class="item"><img src="src/icons/icon-16.png" width="16" height="16" alt=""><span>16px</span></div>
+      <div class="item"><img src="src/icons/icon-24.png" width="24" height="24" alt=""><span>24px</span></div>
+      <div class="item"><img src="src/icons/icon-32.png" width="32" height="32" alt=""><span>32px</span></div>
+      <div class="item"><img src="src/icons/icon-48.png" width="48" height="48" alt=""><span>48px</span></div>
+      <div class="item"><img src="src/icons/icon-64.png" width="64" height="64" alt=""><span>64px</span></div>
+      <div class="item"><img src="src/icons/icon-128.png" width="128" height="128" alt=""><span>128px</span></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Firefox 主题变体 · 浅色工具栏（深色文字）</h2>
+    <div class="row">
+      <div class="item"><img src="src/icons/icon-on-light-16.png" width="16" height="16" alt=""><span>16px</span></div>
+      <div class="item"><img src="src/icons/icon-on-light-32.png" width="32" height="32" alt=""><span>32px</span></div>
+    </div>
+  </section>
+
+  <section class="panel dark">
+    <h2>Firefox 主题变体 · 深色工具栏（浅色文字）</h2>
+    <div class="row">
+      <div class="item"><img src="src/icons/icon-on-dark-16.png" width="16" height="16" alt=""><span>16px</span></div>
+      <div class="item"><img src="src/icons/icon-on-dark-32.png" width="32" height="32" alt=""><span>32px</span></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>弹窗品牌区与状态图标</h2>
+    <div class="row" style="align-items:center">
+      <div class="brand"><img src="src/icons/brand-mark.svg" alt=""><b>Bookmark Sync</b></div>
+      <div class="status-samples">
+        <div class="status-glyph idle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></div>
+        <div class="status-glyph ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg></div>
+        <div class="status-glyph warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><path d="M12 16.5h.01"/></svg></div>
+        <div class="status-glyph error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8l8 8M16 8l-8 8"/></svg></div>
+        <div class="status-glyph dirty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.5"/></svg></div>
+      </div>
+    </div>
+  </section>
+</body>
+</html>
