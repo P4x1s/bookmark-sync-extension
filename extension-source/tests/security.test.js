@@ -71,7 +71,7 @@ function createEnv() {
   globalThis.fetch = async (url, init) => {
     requests.push({ url, init });
     const parts = new URL(url).pathname.split('/').filter(Boolean);
-    if (!parts.includes('contents')) return jsonRes(200, { private: true, default_branch: 'main', permissions: { push: true }, full_name: 'P4x1s/bookmark-sync-vault' });
+    if (!parts.includes('contents')) return jsonRes(200, { private: true, default_branch: 'main', permissions: { push: true }, full_name: 'example/private-repo' });
     const p = parts.slice(parts.indexOf('contents') + 1).join('/');
     if (init.method === 'GET') {
       if (!remote || p !== 'bookmarks.json') return jsonRes(404, { message: 'Not Found' });
@@ -125,7 +125,7 @@ console.log('\n输入校验：');
 
 function validCfg(patch) {
   return Object.assign({
-    owner: 'P4x1s', repo: 'bookmark-sync-vault', branch: 'main', path: 'bookmarks.json',
+    owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
     token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
     conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
   }, patch || {});
