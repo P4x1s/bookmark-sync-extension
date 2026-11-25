@@ -1,8 +1,8 @@
-# Bookmark Sync via GitHub（低内存优化版 v0.3.2）
+# Bookmark Sync via GitHub（低内存优化版 v0.3.3）
 
 **一个插件包同时兼容 Chrome、Edge、Firefox**（并覆盖多数 Chromium 系浏览器）。通过用户授权的 GitHub 私人仓库保存书签树，实现新增、修改、删除、移动以及文件夹层级、名称和顺序的双向同步。
 
-v0.3.2：全面复核后修复首次同步可能覆盖远端书签、消息层缺少配置校验、备份序号可误恢复三项风险，并新增 32 项冒烟与安全测试。
+v0.3.3：**安装后默认零写入**（不建闹钟、不生成 deviceId、不写状态、不访问仓库），并修复 `403 Resource not accessible by personal access token` 只有原始英文错误、无法判断如何授权的问题；同时保留 v0.3.2 的首次同步防覆盖、消息校验与备份序号修复。
 
 ---
 
@@ -75,10 +75,24 @@ bookmark-sync-extension/
 ### 3.1 准备 GitHub 私人仓库与令牌
 
 1. **先新建一个 Private 仓库**（默认分支 `main`，可为空）。插件不预置任何仓库信息，owner / repo 需自行填写；仓库内已有文件不会被删除或覆盖，如同步路径撞上已有文件，会先提交 `backups/initial-*.json` 快照。
-2. 生成 **classic PAT**：GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)。
-   - 勾选 `repo`（私人仓库读写必需；已有 token 若具备 `repo` scope 可直接用）。
-   - **不要使用 fine-grained PAT**：实测写 Contents 会返回 `403 Resource not accessible by personal access token`，即使能读能登录。
+2. 生成令牌，二选一：
+   - **classic PAT**：Settings → Developer settings → Personal access tokens → Tokens (classic) → 勾选完整 `repo` scope。只勾 `public_repo` 无法读写私有仓库，会报 403。
+   - **fine-grained PAT**：Settings → Developer settings → Personal access tokens → Fine-grained tokens → Repository access 勾选目标私有仓库 → Repository permissions 中把 **Contents 设为 `Read and write`**。只给 `Read` 时读取正常但写入必然 403。
+   - 若仓库属于启用了 SSO 的组织，还需在令牌页面点击 **Authorize SSO**。
 3. 分支默认 `main`，同步文件默认 `bookmarks.json`（新仓库中尚不存在，首次同步会创建）。仓库内已有文件不会被删除或覆盖；如同步路径撞上已有文件，会先提交 `backups/initial-*.json` 快照。
+
+> **关于 `403 Resource not accessible by personal access token`**：这不是仓库不存在，也不是插件写错路径，而是令牌对该仓库缺少写权限。「测试连接」会先用只读接口核对 `permissions.push`，若为 `false` 会直接给出按令牌类型区分的修复指引；插件在测试连接阶段**不会写入任何仓库数据**。
+
+### 3.1.1 安装后的默认行为
+
+安装或重新载入插件后，默认状态为 **不写入任何数据**：
+
+- `autoSync` 默认关闭，不建立自动同步闹钟；
+- 不生成 `deviceId`，不写扩展状态，不访问 GitHub；
+- 本地书签变化在未完成配置前不会产生任何状态写入；
+- 只有填写完整 owner / repo / token 并点击 **立即同步**（或显式开启自动同步并保存配置）后，才会开始读写。
+
+如需让插件停止自动写入，关闭「自动同步」并保存配置即可；闹钟会被立即清除。
 
 ### 3.2 加载同一个插件
 
@@ -97,8 +111,8 @@ bookmark-sync-extension/
 ### 3.3 配置与首次同步
 
 1. 点击工具栏图标，填写 owner / repo / token（仓库信息不预置，需自行填写）。
-2. 点击 **测试连接**：应显示仓库为 Private、有写权限，并报告同步文件是否存在。
-3. 点击 **保存配置**，再点击 **立即同步**。
+2. 点击 **测试连接**：应显示仓库为 Private、有写权限，并报告同步文件是否存在；若令牌无写权限会直接给出具体修复步骤。此步骤只发只读请求。
+3. 点击 **保存配置**，再点击 **立即同步**。自动同步默认关闭，需要时再手动开启。
 4. 在第二个浏览器中加载同一个包，配置后「立即同步」拉取远端树（首次拉取会先留本地快照）。
 
 ---
@@ -172,7 +186,7 @@ bookmark-sync-extension/
 
 ### 5.1 静态验证（已执行）
 
-实际结果：12 个脚本语法检查通过；`model.test.js` 5 项、`sync.test.js` 9 项、`smoke.test.js` 17 项、`security.test.js` 15 项，共 **46 项测试全部通过**；唯一 manifest 为合法 JSON 且版本为 0.3.2，同时包含 `service_worker` 与 `scripts`；通用 zip 含 11 个文件。新建仓库与写权限已通过 GitHub API 实测确认。
+实际结果：12 个脚本语法检查通过；`model.test.js` 5 项、`sync.test.js` 9 项、`smoke.test.js` 23 项、`security.test.js` 18 项，共 **55 项测试全部通过**；唯一 manifest 为合法 JSON 且版本为 0.3.3，同时包含 `service_worker` 与 `scripts`；通用 zip 含 11 个文件。新增测试覆盖：安装后零写入、未配置时手动同步被拒、仅在配置完整且显式开启时建闹钟、测试连接零 PUT、`permissions.push=false` 与 403 的指引内容。
 
 复核中修复并复测确认的问题：
 
@@ -183,6 +197,8 @@ bookmark-sync-extension/
 | `SET_CONFLICT` 接受任意策略字符串 | `background.js` 消息处理 | 中（状态污染） | 仅接受 `backup-then-local` / `prefer-remote` |
 | `RESTORE_BACKUP` 非法序号回退为 0 | `background.js`、`sync.js` | 中（误恢复） | 校验非负整数；恢复前校验配置有效性 |
 | 弹窗按钮在异常时保持禁用 | `popup.js` `withBusy` | 低（可用性） | 增加 `finally` 语义，异常时恢复按钮并提示 |
+| 安装后自动同步默认开启，可能意外写入 | `config.js`、`background.js` | 中（意外写入） | 默认 `autoSync: false`；未配置或配置非法不建闹钟；安装时不写 `deviceId` 或状态 |
+| 403 仅显示原始英文错误，无法判断授权项 | `github.js`、`background.js` | 中（可诊断性） | 按 classic / fine-grained 令牌给出 `repo scope` / `Contents: Read and write` / SSO 指引；连接时预检 `permissions.push` |
 
 在 Windows / Node 22 环境下可复现：
 
