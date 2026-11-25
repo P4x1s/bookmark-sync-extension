@@ -214,7 +214,7 @@ function createBrowserEnv(style) {
       const u = new URL(url);
       const parts = u.pathname.split('/').filter(Boolean);
       if (!parts.includes('contents')) {
-        return jsonRes(200, { private: true, default_branch: 'main', permissions: { push: true }, full_name: 'P4x1s/bookmark-sync-vault' });
+        return jsonRes(200, { private: true, default_branch: 'main', permissions: { push: true }, full_name: 'example/private-repo' });
       }
       const p = parts.slice(parts.indexOf('contents') + 1).join('/');
       if (init.method === 'GET') {
@@ -324,12 +324,12 @@ async function main() {
     await checkAsync(style + ' SAVE_CONFIG 与 TEST_CONNECTION 可用', async () => {
       const saved = await dispatch(env, {
         type: 'SAVE_CONFIG',
-        config: { owner: 'P4x1s', repo: 'bookmark-sync-vault', branch: 'main', path: 'bookmarks.json', token: 'ghp_smoketest' },
+        config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_smoketest' },
       });
       assert.equal(saved.ok, true);
       const tested = await dispatch(env, {
         type: 'TEST_CONNECTION',
-        config: { owner: 'P4x1s', repo: 'bookmark-sync-vault', branch: 'main', path: 'bookmarks.json', token: 'ghp_smoketest' },
+        config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_smoketest' },
       });
       assert.equal(tested.ok, true);
       assert.equal(tested.info.private, true);
@@ -398,7 +398,7 @@ async function main() {
           if (message.type === 'GET_STATUS') {
             return {
               ok: true,
-              config: { owner: 'P4x1s', repo: 'bookmark-sync-vault', branch: 'main', path: 'bookmarks.json', token: 'ghp_****test' },
+              config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_****test' },
               state: { lastStatus: 'idle', lastMessage: '', lastSyncAt: '' },
               backups: [],
             };
