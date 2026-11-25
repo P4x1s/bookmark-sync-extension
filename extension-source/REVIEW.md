@@ -1,5 +1,7 @@
 # 项目全面复核报告（v0.3.2，v0.3.3 与 v0.3.4 增补见文末）
 
+> **最终版声明**：v0.3.4 已定义为本项目最终稳定版本（Final Release），功能冻结；仅在发现阻断性缺陷时发布修订。本报告的复核结论、65 项测试与全部修复记录构成该最终版的验收依据。
+
 > **v0.3.3 增补**：安装后默认零写入（`autoSync: false`、未配置不建闹钟、安装时不写 `deviceId`/状态、未配置时书签变化不写状态）；403 错误按 classic / fine-grained 令牌给出 `repo scope`、`Contents: Read and write` 与 SSO 指引；测试连接预检 `permissions.push` 且全程只读。新增 10 项测试（冒烟 17→23，安全 15→18），总计 55 项通过。
 >
 > **v0.3.4 增补**：保存立即落盘（有效配置一次写入生效并清草稿；无效输入写 `bookmarkSync.draft` 防丢失；存储失败返回 `saveFailed` 且保留表单）；首次同步缺 `bookmarks.json` 时无条件创建并完整推送本地树；同步阶段进度 5/15/30/50/60/80/100% 通过消息推送到弹窗进度条，失败显示终态。新增 7 项测试，总计 62 项通过。
@@ -7,6 +9,8 @@
 > **图标增补（v0.3.4 后续）**：统一工具栏/管理页/弹窗品牌与状态图标为同一「云 + 上下双向箭头」语义，16–128px 多尺寸 PNG + SVG 源；Firefox 通过 `theme_icons` 提供深浅工具栏变体，Chromium 使用自带对比度的渐变图标。新增 1 项图标资源测试，总计 63 项通过。
 >
 > **二次复核增补（v0.3.4 后续）**：修复「首次同步失败后重试」被误判为双向冲突、反向覆盖远端的高危分支——`firstSync` 改以 `baseTree` 与 `remoteSha` 同时为空判定，不再受失败时写入的 `lastSyncAt` 污染；`debounceMs` 配置改为在启动与保存配置时刷新缓存并驱动去抖，不再硬编码；构建脚本图标校验补齐高度。新增 2 项回归测试（sync、smoke 各 1），总计 65 项通过。
+>
+> **最终版数据一致性修订（v0.3.4 后续）**：修复浏览器/中间层缓存 GitHub Contents API 的 GET 响应（含过期 `sha` 与 `content`）导致的两类故障——本地删除的书签在下一次同步被旧远端内容重新拉回、随后用陈旧 `sha` 写入触发 `409 bookmarks.json does not match <sha>`。根因：写入走不带 query 的 PUT URL，无法使带 `?ref=main` 的 GET 缓存失效。修复：`lib/github.js` 所有请求增加 `cache: 'no-store'` 与 `Cache-Control: no-cache, no-store, must-revalidate` / `Pragma: no-cache`，确保每次读取真实 sha/content。新增 2 项回归测试（删除不被缓存回滚且不产生 409、全请求禁用缓存声明），总计 67 项通过。
 
 
 
