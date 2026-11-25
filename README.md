@@ -1,37 +1,84 @@
 # Bookmark Sync via GitHub（低内存优化版 v0.3.4）
 
-**一个插件包同时兼容 Chrome、Edge、Firefox**（并覆盖多数 Chromium 系浏览器）。通过用户授权的 GitHub 私人仓库保存书签树，实现新增、修改、删除、移动以及文件夹层级、名称和顺序的双向同步。
+一个插件包同时兼容 **Chrome、Edge、Firefox** 及多数 Chromium 系浏览器。它通过用户自己授权的 **GitHub 私有仓库**保存浏览器的**书签/收藏夹树**，实现新增、修改、删除、移动、重命名、层级与顺序的双向同步。
 
-v0.3.4：**保存即持久化**（有效配置立即生效，无效输入写入草稿避免丢失，存储写入失败明确提示）、**首次同步缺文件自动创建并完整推送本地书签**、**同步全过程显示百分比与阶段进度**；同时保留 v0.3.3 的默认零写入与 403 授权指引，以及 v0.3.2 的首次同步防覆盖、消息校验与备份序号修复。
+> 重要术语：本扩展同步的是**书签（bookmarks）**，不是当前打开的标签页（tabs）。清单只申请 `bookmarks`、`storage`、`alarms` 权限，不读取浏览历史或当前标签页。
+
+v0.3.4 核心能力：**保存即持久化**（有效配置立即生效、无效输入写草稿防丢失、写失败明确提示）、**首次同步缺文件自动创建并完整推送本地书签**、**同步全过程百分比与阶段进度**；同时保留 v0.3.3 的**安装后默认零写入**与 403 授权指引，以及 v0.3.2 的首次同步防覆盖、消息校验与备份序号修复。
 
 ---
 
-## 1. 单包兼容的实现方式
+## 目录
 
-旧版按浏览器拆成三个包；v0.2.0 改为**一份 Manifest V3 + 一个目录 + 一个 zip**：
+1. [项目简介与适用范围](#1-项目简介与适用范围)
+2. [单包多浏览器的实现方式](#2-单包多浏览器的实现方式)
+3. [项目结构](#3-项目结构)
+4. [安装方法](#4-安装方法)
+5. [使用方法](#5-使用方法)
+6. [同步规则详解](#6-同步规则详解)
+7. [数据格式与本地存储](#7-数据格式与本地存储)
+8. [安全与隐私](#8-安全与隐私)
+9. [运行验证说明](#9-运行验证说明)
+10. [浏览器兼容差异](#10-浏览器兼容差异)
+11. [故障排查](#11-故障排查)
+12. [后续可配置项](#12-后续可配置项)
+
+---
+
+## 1. 项目简介与适用范围
+
+### 1.1 它做什么
+
+- 把浏览器书签树序列化为一份 `bookmarks.json`，存放在你自己指定的 GitHub 仓库中（建议 Private）。
+- 在多台浏览器/多台设备间保持书签一致：新增、改名、改网址、删除、移动、调整顺序与文件夹层级都能同步。
+- 用稳定 `uuid` 标识节点，解决 Chrome 与 Firefox 本地书签 ID 不一致的问题。
+- 三方比较（上次基准 / 当前本地 / 当前远端）+ SHA 乐观锁，避免多端并发时静默覆盖。
+- 覆盖性写操作前自动备份，可回滚。
+
+### 1.2 它不做什么
+
+| 不做的事 | 说明 |
+|---|---|
+| 不同步当前打开的标签页 | 需要 `tabs` 权限，本扩展未申请 |
+| 不上传令牌或设备标识到仓库文件 | 令牌只存在于扩展本地存储与 API 请求头 |
+| 不收集统计/遥测 | 无第三方脚本、无外部依赖、无网络请求到非 GitHub 域名 |
+| 不删除仓库里的其他文件 | 只读写配置中指定的 `bookmarks.json`，并在 `backups/` 追加快照 |
+| 不在安装后写入任何数据 | 见 [4.5 安装后的默认状态](#45-安装后的默认状态) |
+
+### 1.3 适用场景
+
+- 有多台电脑/多个浏览器，希望书签保持一致。
+- 希望数据存放在自己可控的私有仓库，而不是第三方同步服务。
+- 能自行创建 GitHub 令牌并完成一次初始配置（面向新手的步骤见第 4、5 章）。
+
+---
+
+## 2. 单包多浏览器的实现方式
+
+旧版按浏览器拆成三个包；v0.2.0 起改为**一份 Manifest V3 + 一个目录 + 一个 zip**：
 
 ```json
 "background": {
   "service_worker": "background.js",
-  "scripts": ["lib/util.js", ..., "background.js"]
+  "scripts": ["lib/util.js", "...", "background.js"]
 }
 ```
 
-- Chromium 系（Chrome / Edge / Opera / Brave / Vivaldi）：使用 `service_worker`，Chrome 121+ 会忽略 MV3 中同时出现的 `scripts`。
-- Firefox：使用 `scripts` 启动事件页；Firefox 121+ 即使 manifest 中存在 `service_worker` 也能正常启动后台页。
-- Safari：同样读取 `scripts`；默认事件页，未在本版本做签名与真机验证。
+- **Chromium 系**（Chrome / Edge / Opera / Brave / Vivaldi）：使用 `service_worker`，Chrome 121+ 会忽略 MV3 中同时出现的 `scripts`。
+- **Firefox**：使用 `scripts` 启动事件页；Firefox 121+ 即使 manifest 中存在 `service_worker` 也能正常启动后台页。
+- **Safari**：同样读取 `scripts`；默认事件页，未在本版本做签名与真机验证。
 
 所有脚本均为经典脚本（非 ES Module），后台入口通过 `if (!BS.api && importScripts)` 守卫：Chromium 走 `importScripts` 加载依赖，Firefox/Safari 由 `background.scripts` 按顺序加载，同一份 `background.js` 无需改动。
 
-结论：**只需分发 `bookmark-sync-universal.zip` 或 `dist/universal/` 目录**。
+**结论：只需分发 `bookmark-sync-universal.zip` 或 `dist/universal/` 目录。**
 
-### 1.1 v0.3.0 低内存与稳定性措施
+### 2.1 低内存与稳定性措施
 
 | 措施 | 原实现 | 现实现 | 收益 |
 |---|---|---|---|
 | 本地快照存储 | 最多 5 份完整树内嵌在常规 state，每次读取 state 全部载入 | 快照独立 key，常规 state 只含必要字段；弹窗只取元信息，恢复时才读完整树 | 后台不再反复序列化/反序列化多份书签树 |
 | 弹窗状态更新 | 每 5 秒轮询后台 | 后台同步完成后主动推送 `STATUS`，弹窗收到后读取一次 | 弹窗打开时不再持续唤醒后台 |
-| 书签事件处理 | 每个事件都调用徽章 API | 事件只触发去抖计时器，3 秒后合并执行一次 | 大量书签操作时 API 调用量大幅下降 |
+| 书签事件处理 | 每个事件都调用徽章 API | 事件只触发去抖计时器，默认 3 秒后合并执行一次 | 大量书签操作时 API 调用量大幅下降 |
 | 树拷贝 | 推送/拉取后深拷贝整棵树作为 base | 直接复用引用，用完即释放 | 少一份完整树常驻 |
 | 序列化 | `JSON.stringify(..., null, 2)` | 同步文件无缩进；备份文件仍保留可读性 | 大书签库字符串与内存占用下降 |
 | 低内存模式 | 无 | 默认开启：本地快照只留 1 份 | 进一步压缩长期存储与读取量 |
@@ -40,89 +87,300 @@ v0.3.4：**保存即持久化**（有效配置立即生效，无效输入写入�
 
 ---
 
-## 2. 项目结构
+## 3. 项目结构
 
-```
+```text
 bookmark-sync-extension/
 ├─ build.py                   # 生成唯一通用产物并清理旧拆包
-├─ README.md
+├─ README.md                  # 本文档（详细说明 / 规则 / 安装 / 使用）
+├─ REVIEW.md                  # 全面复核与修复记录
+├─ icon-preview.html          # 图标多尺寸 / 深浅背景预览（不进入分发 zip）
 ├─ src/
 │  ├─ manifest.base.json      # 唯一 MV3 清单模板（含 dual background）
 │  ├─ background.js           # 后台：书签事件、闹钟、消息、徽章
 │  ├─ popup.html / .css / .js # 配置与状态界面
+│  ├─ icons/                  # 统一图标资源
+│  │  ├─ icon.svg             # 可随系统深浅色变化的主 SVG
+│  │  ├─ brand-mark.svg       # 弹窗内纯图形标记
+│  │  └─ icon-*.png           # 16/24/32/48/64/128 多尺寸与深浅主题变体
 │  └─ lib/
-│     ├─ util.js              # UUID / UTF-8 Base64 / 深比较 / 防抖
+│     ├─ util.js              # UUID / UTF-8 Base64 / 深比较 / 防抖 / 授权指引
 │     ├─ api.js               # chrome.* 与 browser.* 的 Promise 适配层
-│     ├─ config.js            # 配置与 token 存储（storage.local）
+│     ├─ config.js            # 配置、草稿与令牌存储（storage.local）
 │     ├─ github.js            # GitHub Contents API 客户端（SHA / 备份）
 │     ├─ model.js             # 书签树归一化、UUID 映射、结构校验
-│     └─ sync.js              # 三方比较、增量、冲突、备份、回滚
+│     └─ sync.js              # 三方比较、增量、冲突、备份、回滚、进度上报
+├─ tools/
+│  └─ generate_icons.py       # 纯标准库图标生成器（无第三方依赖）
 ├─ tests/
 │  ├─ model.test.js           # Node 纯逻辑测试
 │  ├─ sync.test.js            # 模拟 GitHub API 的同步引擎集成测试
 │  ├─ smoke.test.js           # 安装/加载/消息/核心功能冒烟测试（双浏览器路径）
 │  └─ security.test.js        # 输入校验、权限、敏感数据、危险逻辑安全测试
-└─ dist/
-   └─ universal/              # 唯一构建产物（一个插件）
+├─ dist/
+│  └─ universal/              # 唯一构建产物（一个插件）
+└─ bookmark-sync-universal.zip # 分发压缩包
 ```
 
 生成产物：`bookmark-sync-universal.zip`。
 
+图标统一复用「云 + 上下双向箭头」语义，工具栏、扩展管理页与弹窗品牌区共用同一套圆角、描边和配色；PNG 提供 16/24/32/48/64/128 多尺寸。Chromium 系使用自带对比度的渐变图标；Firefox 另通过 `theme_icons` 提供浅色/深色工具栏变体（该键仅 Firefox 使用，Chromium 会忽略）。需要重绘时执行：
+
+```bash
+python tools/generate_icons.py
+python build.py
+```
+
 ---
 
-## 3. 快速开始
+## 4. 安装方法
 
-### 3.1 准备 GitHub 私人仓库与令牌
+### 4.1 第一步：准备一个 GitHub 私有仓库
 
-1. **先新建一个 Private 仓库**（默认分支 `main`，可为空）。插件不预置任何仓库信息，owner / repo 需自行填写；仓库内已有文件不会被删除或覆盖，如同步路径撞上已有文件，会先提交 `backups/initial-*.json` 快照。
-2. 生成令牌，二选一：
-   - **classic PAT**：Settings → Developer settings → Personal access tokens → Tokens (classic) → 勾选完整 `repo` scope。只勾 `public_repo` 无法读写私有仓库，会报 403。
-   - **fine-grained PAT**：Settings → Developer settings → Personal access tokens → Fine-grained tokens → Repository access 勾选目标私有仓库 → Repository permissions 中把 **Contents 设为 `Read and write`**。只给 `Read` 时读取正常但写入必然 403。
-   - 若仓库属于启用了 SSO 的组织，还需在令牌页面点击 **Authorize SSO**。
-3. 分支默认 `main`，同步文件默认 `bookmarks.json`（新仓库中尚不存在，首次同步会创建）。仓库内已有文件不会被删除或覆盖；如同步路径撞上已有文件，会先提交 `backups/initial-*.json` 快照。
+1. 新建一个 **Private** 仓库，建议默认分支为 `main`，仓库可以为空。
+2. 插件不预置任何账户名或仓库名，安装后需自行填写。
+3. 仓库里已有的其他文件不会被删除或改动；如果同步路径 `bookmarks.json` 撞上已有文件，首次同步会先把原文件原样备份到 `backups/initial-<时间>-existing-file.json`，再写入书签数据。
+4. 如果同步文件是本插件不支持的更高 `schema` 版本，同步会直接报错停止，不会覆盖。
 
-> **关于 `403 Resource not accessible by personal access token`**：这不是仓库不存在，也不是插件写错路径，而是令牌对该仓库缺少写权限。「测试连接」会先用只读接口核对 `permissions.push`，若为 `false` 会直接给出按令牌类型区分的修复指引；插件在测试连接阶段**不会写入任何仓库数据**。
+### 4.2 第二步：生成访问令牌（PAT）
 
-### 3.1.1 安装后的默认行为
+二选一即可：
 
-安装或重新载入插件后，默认状态为 **不写入任何数据**：
+| 类型 | 创建路径 | 必须授予的权限 |
+|---|---|---|
+| **classic PAT（推荐新手）** | GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) | 勾选完整 `repo` scope。只勾 `public_repo` 无法读写私有仓库，会报 403 |
+| **fine-grained PAT** | 同上 → Fine-grained tokens | Repository access 选中目标仓库；Repository permissions 中 **Contents 设为 `Read and write`**。只给 `Read` 时读取正常但写入必然 403 |
+
+补充：若仓库属于启用了 SSO 的组织，还需在令牌页面点击 **Authorize SSO**。
+
+> 令牌只在扩展本地与 `api.github.com` 请求头中出现，不会写入仓库文件，也不会在界面上明文显示。
+
+### 4.3 第三步：下载并加载插件
+
+下载 `bookmark-sync-universal.zip` 并解压，所有浏览器都选择**同一个目录**：
+
+| 浏览器 | 操作步骤 | 选择的目标 |
+|---|---|---|
+| Chrome | 地址栏输入 `chrome://extensions` → 打开「开发者模式」→「加载已解压的扩展程序」 | 解压后的 `dist/universal` 目录 |
+| Edge | 地址栏输入 `edge://extensions` → 打开「开发者模式」→「加载解压缩的扩展」 | 解压后的 `dist/universal` 目录 |
+| Firefox | 地址栏输入 `about:debugging#/runtime/this-firefox` →「临时载入附加组件」 | `dist/universal/manifest.json` |
+| Opera / Brave / Vivaldi | 扩展管理页 →「加载已解压的扩展」 | 解压后的 `dist/universal` 目录 |
+
+> 最低版本：Chrome / Edge 121+，Firefox 121+（dual background 字段要求）。
+> Firefox 的「临时载入」在浏览器重启后失效；开发期可用 `web-ext run --source-dir dist/universal` 持续加载。
+
+### 4.4 从源码自行构建（可选）
+
+需要 Python 3（仅标准库，无需安装依赖）：
+
+```bash
+python build.py
+```
+
+产物为 `dist/universal/` 与 `bookmark-sync-universal.zip`。构建脚本会校验 manifest 合法性、双后台字段、图标存在性与 PNG 实际宽高。
+
+### 4.5 安装后的默认状态
+
+安装或重新载入插件后，**默认不写入任何数据**：
 
 - `autoSync` 默认关闭，不建立自动同步闹钟；
 - 不生成 `deviceId`，不写扩展状态，不访问 GitHub；
 - 本地书签变化在未完成配置前不会产生任何状态写入；
 - 只有填写完整 owner / repo / token 并点击 **立即同步**（或显式开启自动同步并保存配置）后，才会开始读写。
 
-如需让插件停止自动写入，关闭「自动同步」并保存配置即可；闹钟会被立即清除。
-
-### 3.2 加载同一个插件
-
-解压 `bookmark-sync-universal.zip`，所有浏览器都选择**同一个目录**：
-
-| 浏览器 | 步骤 | 选择目录 |
-|---|---|---|
-| Chrome | `chrome://extensions` → 开发者模式 → 加载已解压的扩展程序 | `dist/universal` |
-| Edge | `edge://extensions` → 开发者模式 → 加载解压缩的扩展 | `dist/universal` |
-| Firefox | `about:debugging#/runtime/this-firefox` → 临时载入附加组件 | `dist/universal/manifest.json` |
-| Opera / Brave / Vivaldi | 扩展管理页 → 加载已解压的扩展 | `dist/universal` |
-
-> 最低版本：Chrome / Edge 121+，Firefox 121+（dual background 字段要求）。
-> Firefox 的「临时载入」在浏览器重启后失效；开发期可用 `web-ext run --source-dir dist/universal` 持续加载。
-
-### 3.3 配置与首次同步
-
-1. 点击工具栏图标，填写 owner / repo / token（仓库信息不预置，需自行填写）。
-2. 点击 **保存配置**：有效配置一次存储写入后立即生效；尚未填完或校验未通过时，输入会立即保存为草稿并在弹窗提示，修正后再次保存即可生效。存在草稿时不会启动同步，避免用旧配置误操作。
-3. 点击 **测试连接**：应显示仓库为 Private、有写权限，并报告同步文件是否存在；若令牌无写权限会直接给出具体修复步骤。此步骤只发只读请求。
-4. 点击 **立即同步**：首次同步若仓库没有 `bookmarks.json`，插件会自动创建该文件并把本地书签树完整推送上去；同步期间弹窗显示百分比进度条和阶段说明，直到成功或失败。自动同步默认关闭，需要时再手动开启。
-5. 在第二个浏览器中加载同一个包，配置后「立即同步」拉取远端树（首次拉取会先留本地快照）。
+如需让插件停止自动写入，关闭「自动同步」并保存配置即可，闹钟会被立即清除。
 
 ---
 
-## 4. 同步模型与关键行为
+## 5. 使用方法
 
-### 4.1 数据格式
+### 5.1 首次配置
 
-远端文件 `bookmarks.json`：
+1. 点击工具栏图标打开弹窗。
+2. 依次填写：
+   - **GitHub 用户名 / 组织名**（owner）
+   - **仓库名**（repo）
+   - **分支**（默认 `main`）
+   - **同步文件路径**（默认 `bookmarks.json`）
+   - **Personal Access Token**
+3. 点击 **保存配置**：
+   - 有效配置一次存储写入后立即生效；
+   - 尚未填完或校验未通过时，输入会立即保存为**草稿**并在弹窗提示，修正后再次保存即可生效；
+   - 存在草稿时不会启动同步，避免用旧配置误操作；
+   - 存储写入失败时返回 `saveFailed`，弹窗保留当前输入不刷新，可直接重试。
+4. 点击 **测试连接**：应显示仓库可访问、有写权限，并报告同步文件是否存在。此步骤**只发只读请求**，不会写入仓库。
+   - 若令牌无写权限，会按令牌类型给出具体修复步骤（`repo scope` / `Contents: Read and write` / SSO）。
+5. 点击 **立即同步**：
+   - 仓库没有 `bookmarks.json` 时，插件自动创建该文件并把本地书签树完整推送上去；
+   - 同步期间弹窗显示百分比进度条与阶段说明，直到成功或失败。
+
+### 5.2 接入第二台浏览器
+
+在另一台浏览器加载同一个包，配置后点击「立即同步」。首次同步时若远端已有本插件格式的书签树，插件会**先留本地快照，再采用远端**，避免覆盖已有数据。
+
+### 5.3 日常同步
+
+| 方式 | 触发条件 | 说明 |
+|---|---|---|
+| 手动 | 弹窗点击「立即同步」 | 任何状态下都可用，最直观 |
+| 书签变化 | 新增/删除/修改/移动书签后，去抖 `debounceMs`（默认 3000ms） | 开启自动同步时直接同步；关闭时只把状态标为「本地已变化」 |
+| 定时 | 开启自动同步后按 `syncIntervalMinutes`（默认 15 分钟） | 仅在配置完整且合法时建立闹钟 |
+| 冲突处理 | 点击弹窗中的任一冲突策略 | 保存策略后立即触发一次同步 |
+| 备份恢复 | 选择本地快照恢复 | 恢复后立即推送远端，避免被下一次同步反向覆盖 |
+
+同一扩展内的同步任务互斥：已有任务执行时，重复触发会被跳过并提示。
+
+### 5.4 查看状态与进度
+
+弹窗状态卡会显示：
+
+- 状态：尚未同步 / 无变化 / 已推送 / 已拉取 / 冲突 / 本地已变化 / 同步失败；
+- 进度：同步期间显示 `5% → 15% → 30% → 50% → 60% → 80% → 100%` 与阶段文字；
+- 失败：显示 100% 失败终态与具体错误，按钮自动恢复可用。
+
+进度阶段含义见 [6.3 数据流向与进度](#63-数据流向与进度)。
+
+### 5.5 冲突处理与回滚
+
+当两端在两次同步之间都发生修改时，弹窗出现两个按钮：
+
+- **备份远端，保留本地**（默认策略）：把远端快照提交到 `backups/`，然后把本地树推送上去；
+- **备份本地，采用远端**：把本地快照提交到 `backups/` 和扩展本地存储，然后用远端树重建本地结构。
+
+也可在「冲突策略」中预设，自动同步时按预设执行。本地快照可在弹窗的备份列表中选择恢复。
+
+---
+
+## 6. 同步规则详解
+
+### 6.1 四个核心概念
+
+| 概念 | 符号 | 说明 |
+|---|---|---|
+| 基准树 | `baseTree` | 上次**成功**同步后保存的树快照；判断「谁改了」的参照物 |
+| 本地树 | `localTree` | 当前浏览器中的真实书签树，每次同步时重新读取 |
+| 远端树 | `remoteTree` | `bookmarks.json` 中的 `tree` 字段 |
+| 远端 SHA | `remoteSha` | GitHub 文件当前版本的哈希，写入时携带以防并发覆盖 |
+
+「首次同步」的精确定义：`baseTree` 为空且 `remoteSha` 为空。**同步失败也会写 `lastSyncAt`，但它不参与首次判定**，因此首次失败后修正配置重试仍按首次规则处理，不会反向覆盖远端。
+
+### 6.2 触发时机
+
+| 触发源 | 实现位置 | 行为 |
+|---|---|---|
+| 手动点击「立即同步」 | `background.js` 的 `SYNC_NOW` | 立即调用 `sync.runSync()` |
+| 本地书签事件 | `background.js` 的 `bookmarkCreated/Removed/Changed/Moved` | 去抖后执行：`autoSync=true` 则同步；否则仅标记 `dirty` 与徽章 |
+| 定时闹钟 | `background.js` 的 `alarm` 事件 | 仅当 `autoSync=true` 且配置合法时触发 |
+| 切换冲突策略 | `background.js` 的 `SET_CONFLICT` | 保存策略后立即同步一次 |
+| 恢复本地备份 | `sync.js` 的 `restoreBackup` | 恢复后立即推送远端 |
+| **保存配置** | `SAVE_CONFIG` | **不会自动同步**；只写入配置、清除草稿、按需重建闹钟 |
+| **安装扩展** | `installed` 事件 | **不触发同步、不写任何数据** |
+
+存在草稿时同步被拒绝；配置不完整或非法时不会建立闹钟。
+
+### 6.3 数据流向与进度
+
+**推送方向（本地 → 远端）**
+
+```text
+浏览器书签 API
+  → buildLocalTree（生成/复用稳定 uuid）
+  → 与 baseTree 比较是否有变化
+  → JSON.stringify({schema, updatedAt, deviceId, tree})
+  → PUT /repos/{owner}/{repo}/contents/{path}（携带读取到的 sha）
+  → 成功后更新 baseTree 与 remoteSha
+```
+
+**拉取方向（远端 → 本地）**
+
+```text
+GET /contents
+  → parseRemotePayload（校验 schema 与结构）
+  → 与 baseTree 比较是否有变化
+  → 先写本地快照
+  → applyTreeToLocal（按 uuid 做 create / update / move / remove）
+  → 重建 baseTree 与 remoteSha
+```
+
+**进度阶段**
+
+| 百分比 | 阶段 | 含义 |
+|---|---|---|
+| 5% | `config` | 检查草稿与配置合法性 |
+| 15% | `local` | 读取浏览器书签 |
+| 30% | `remote` | 读取 GitHub 同步文件 |
+| 50% | `compare` | 比较三方差异（文件不存在时进入创建分支） |
+| 60% | `backup` | 备份将被覆盖的一方（无覆盖则跳过） |
+| 70% | `create` | 首次且文件不存在时创建 `bookmarks.json` |
+| 80% | `write` / `apply` | 写入远端或应用本地差异 |
+| 100% | `done` / `failed` | 完成或失败终态 |
+
+### 6.4 覆盖优先级与决策表
+
+| 场景 | 结果 | 优先级 |
+|---|---|---|
+| 首次 + 远端 `bookmarks.json` 存在且为非空本格式树 | **远端优先**：本地先留快照，然后采用远端 | 远端 |
+| 首次 + 远端无文件 | **本地优先**：创建文件，完整推送本地树（即使本地为空树也创建） | 本地 |
+| 首次 + 远端 tree 为空 | 按本地变化推送；空树无数据需要保护 | 本地 |
+| 首次 + 远端文件存在但不是本插件格式 / JSON 损坏 | **本地优先**：先把原内容备份到 `backups/initial-*.json`，再写入 | 本地 |
+| 首次 + 远端 `schema > 1` | 报错停止，**不覆盖** | 不写入 |
+| 非首次 + 仅本地变化 | 推送本地树 | 本地 |
+| 非首次 + 仅远端变化 | 本地先留快照，更新远端变更到本地 | 远端 |
+| 非首次 + 双方都变化 | 默认：**备份远端，保留本地**；`prefer-remote`：**备份本地，采用远端** | 按策略 |
+| 双方均无变化 | `noop`，零写入 | 不写入 |
+| 首次同步失败后重试 | 仍按首次规则处理，不受 `lastSyncAt` 污染 | 远端（若远端非空） |
+
+### 6.5 节点级对齐规则（拉取方向）
+
+拉取是对本地书签树的**镜像对齐**，不是并集合并：
+
+| 情况 | 动作 | 判定依据 |
+|---|---|---|
+| 远端节点在本地映射表中命中 | 覆盖标题与网址，移动到远端指定的顺序；文件夹递归处理子级 | **稳定 `uuid`**，不是标题文字 |
+| 远端有、本地没有 | 在同一父文件夹下按远端顺序新建 | `uuid` 未命中 |
+| 本地有、远端没有 | 删除本地多余节点 | 对齐结束时清理 |
+
+关键限定：标题相同但 `uuid` 不同的两条书签会被当作两条不同记录——远端那条新建、本地那条删除。`uuid` 在本地首次生成并存入映射，跨设备靠首次同步建立对应关系。
+
+根文件夹有特殊兜底：先按 `uuid` 匹配，再按标题匹配，最后取任意未使用的根目录。
+
+**推送方向不是逐节点合并**：整棵本地树序列化后覆盖 `bookmarks.json`，远端独有节点随之消失；覆盖前若走冲突分支会先提交远端快照。
+
+### 6.6 冲突处理
+
+- 默认策略 `backup-then-local`：先提交远端快照到 `backups/bookmarks-<时间>-conflict-remote.json`，再推送本地。
+- 策略 `prefer-remote`：先保存本地快照，再提交远端快照到 `backups/bookmarks-<时间>-conflict-local.json`，然后按远端树重建本地。
+- 两种策略都确保「被覆盖的一方」在仓库和/或本地留有可恢复副本。
+
+### 6.7 边界情况
+
+| 边界 | 处理 |
+|---|---|
+| 空仓库 / 无 `bookmarks.json` | 404 视为「远端暂无文件」；首次同步创建文件并推送完整本地树；其他 GitHub 错误直接失败 |
+| 远端 tree 为空 | 不进入首拉分支，按本地变化处理 |
+| 同名文件非本插件格式 | 原样备份后写入，绝不删除原内容 |
+| 更高 `schema` 版本 | 报错停止，不覆盖，等待插件升级 |
+| 多端同时修改 | 三方比较 + `PUT` 携带 `sha`；期间远端被他人改动则返回 409，同步失败，不会静默覆盖 |
+| 同一扩展重复触发 | `syncing` 互斥，后一次直接跳过 |
+| 远端文件被删除且非首次同步 | 本地无变化判为 `noop`；本地有变化走冲突分支（默认重建远端文件，`prefer-remote` 因无远端树可应用会失败） |
+| 配置草稿存在 | 同步被拒绝，提示先修正并保存配置 |
+| 存储写入失败 | 返回 `saveFailed`，表单保留输入，可直接重试 |
+| 网络异常 / 令牌失效 | 显示明确错误与终态，本地书签不受影响；修正后可继续同步 |
+| 浏览器内置特殊根节点被重命名 | 记录 warning 并跳过，不影响其他节点 |
+
+### 6.8 备份与回滚
+
+- **远端快照**：写入 `backups/bookmarks-<时间>-<原因>.json`，原因包括 `conflict-remote`、`conflict-local`、`existing-file`。
+- **本地快照**：写入扩展存储独立键 `bookmarkSync.backups`。低内存模式默认只保留 **1 份**；关闭低内存模式后按 `backupCount`（1–5）保留。
+- 弹窗只读取备份元信息（时间、原因、节点数），选中恢复时才读取完整树，避免常驻内存。
+
+---
+
+## 7. 数据格式与本地存储
+
+### 7.1 远端同步文件
+
+路径默认 `bookmarks.json`（可在配置中修改）：
 
 ```json
 {
@@ -130,71 +388,49 @@ bookmark-sync-extension/
   "updatedAt": "2026-11-24T03:00:00.000Z",
   "deviceId": "<稳定设备ID>",
   "tree": [
-    { "uuid": "...", "type": "folder", "title": "Bookmarks bar",
+    {
+      "uuid": "…",
+      "type": "folder",
+      "title": "Bookmarks bar",
       "children": [
-        { "uuid": "...", "type": "url", "title": "示例", "url": "https://example.com" }
-      ] }
+        { "uuid": "…", "type": "url", "title": "示例", "url": "https://example.com" }
+      ]
+    }
   ]
 }
 ```
 
 稳定 `uuid` 保存在扩展存储中并映射到浏览器本地 bookmark id，解决 Chrome/Firefox 本地 ID 不一致的问题。
 
-### 4.2 三方比较与决策
+### 7.2 扩展本地存储键
 
-| 本地相对 base | 远端相对 base | 行为 |
-|---|---|---|
-| 无变化 | 无变化 | 不写入 |
-| 有变化 | 无变化 | 推送本地（增量，仅在 SHA 匹配时更新远端） |
-| 无变化 | 有变化 | 先留本地快照，再应用远端 |
-| 有变化 | 有变化 | 冲突：按配置备份后二选一 |
-| 无 base（首次） | 远端存在 | 先留本地快照，采用远端（本地书签被覆盖前可回滚） |
-| 无 base（首次） | 远端不存在 | 推送本地，创建远端文件 |
-
-### 4.3 避免误覆盖的措施
-
-1. `PUT /contents` 携带上次读取的 `sha`；若期间远端被他人修改，GitHub 返回 `409` 而不是静默覆盖。
-2. 任何覆盖远端前，先将**远端快照**提交到 `backups/bookmarks-<时间>-conflict-remote.json`。
-3. 任何改写本地书签树前，先将**本地快照**存入 `storage.local.localBackups`（保留最近 5 份）。
-4. 冲突默认策略是「备份远端 + 保留本地」，不会自动丢弃用户当前浏览器数据。
-5. 同步过程中写入本地书签时设置 `applying` 标志，避免 `onChanged` 事件回环触发同步。
-
-### 4.4 仓库现有内容保护
-
-- 插件只读写配置中指定的 `bookmarks.json`，不会遍历、修改或删除仓库中的其他文件。
-- 若该路径已存在**非本插件格式**的文件（例如用户自己的数据），首次同步会先把原始内容原样提交到 `backups/initial-<时间>-existing-file.json`，再写入书签数据。原内容始终保留在仓库中。
-- 若文件是本插件不支持的更高 schema 版本，同步直接报错并停止，不会覆盖。
-- 所有冲突与恢复操作同样先写 `backups/`，并在本地 `bookmarkSync.backups` 留快照。
-
-### 4.5 冲突处理
-
-冲突时弹窗出现两个按钮：
-
-- **备份远端，保留本地**：把远端快照提交到 `backups/`，然后把本地树推送上去。
-- **备份本地，采用远端**：把本地快照提交到 `backups/` 和 `storage.local`，然后用远端树重建本地结构。
-
-也可在「冲突策略」中预设，自动同步时按预设执行。
-
-### 4.6 增量语义
-
-- 本地：每次同步重新读取完整树做结构比较；只有真正有差异时才发写请求。
-- 远端：读取 SHA 并参与 PUT；无差异时零写入。
-- 对本地执行的是**差异化的 create/update/move/remove**，不是删除后全量重建，最大限度保留浏览器自身元数据。
-
-### 4.6 保存与进度反馈
-
-- **立即保存**：`SAVE_CONFIG` 先写入 `storage.local` 再返回；有效配置写入生效键并同时清空草稿，无效输入写入 `bookmarkSync.draft`。草稿只在扩展本地，不上报、不参与同步；存在草稿时同步会被拒绝并提示先修正配置。
-- **保存失败**：存储写入失败时返回 `saveFailed`，弹窗保留当前输入不刷新，并给出明确错误，用户可直接重试。
-- **缺文件首次同步**：`bookmarks.json` 返回 404 且为首次同步时，跳过“无变化”判断，直接创建文件并推送完整本地树；浏览器默认三个根文件夹也会被完整写入。
-- **进度反馈**：同步引擎依次上报配置检查 5%、读取本地 15%、读取远端 30%、比较差异 50%、备份 60%、写入/应用 80%、完成 100%。弹窗显示进度条、百分比与阶段描述；失败时显示 100% 失败终态与具体错误，按钮恢复正常。
+| 键 | 内容 |
+|---|---|
+| `bookmarkSync.config` | 当前生效配置（含令牌，仅扩展可读） |
+| `bookmarkSync.draft` | 未通过校验时的暂存输入，不生效、不参与同步 |
+| `bookmarkSync.state` | 轻量状态：`baseTree`、`remoteSha`、时间、状态、UUID 映射等 |
+| `bookmarkSync.backups` | 本地完整树快照列表，按需读取 |
 
 ---
 
-## 5. 运行验证说明
+## 8. 安全与隐私
 
-### 5.1 静态验证（已执行）
+- 令牌只在浏览器扩展本地存储与 `api.github.com` 请求头中出现；不会写入仓库文件、不会出现在日志或 UI 明文（UI 脱敏显示）。
+- 同步文件可能包含完整书签标题与 URL，请使用 **Private** 仓库并仅授权必要 token。
+- classic PAT 的 `repo` scope 权限较宽；建议使用专用 GitHub 账号或专用 token，并定期轮换。
+- 「测试连接」为纯只读预检，会核对 `permissions.push`，不会通过实际写入来试探权限。
+- 所有覆盖性写操作前都会生成备份；如发现异常，优先从 `backups/` 或扩展本地快照回滚，再排查配置。
+- 无第三方运行时依赖、无遥测、无远程脚本；权限为最小集 `bookmarks` / `storage` / `alarms` + `https://api.github.com/*`。
 
-实际结果：12 个脚本语法检查通过；`model.test.js` 5 项、`sync.test.js` 12 项、`smoke.test.js` 23 项、`security.test.js` 22 项，共 **62 项测试全部通过**；唯一 manifest 为合法 JSON 且版本为 0.3.4，同时包含 `service_worker` 与 `scripts`；通用 zip 含 11 个文件。新增测试覆盖：无效输入草稿落盘、有效保存清草稿、存储失败返回、草稿阻止同步、缺文件首次同步完整推送、进度按阶段递增与失败终态、弹窗进度渲染。
+---
+
+## 9. 运行验证说明
+
+### 9.1 静态验证（已执行）
+
+实际结果：12 个脚本语法检查通过；`model.test.js` 5 项、`sync.test.js` 13 项、`smoke.test.js` 25 项、`security.test.js` 22 项，共 **65 项测试全部通过**；唯一 manifest 为合法 JSON 且版本为 0.3.4，同时包含 `service_worker` 与 `scripts`；通用 zip 含 23 个文件（含 12 个图标资源）。
+
+新增测试覆盖：无效输入草稿落盘、有效保存清草稿、存储失败返回、草稿阻止同步、缺文件首次同步完整推送、进度按阶段递增与失败终态、弹窗进度渲染、图标尺寸/主题变体与清单引用完整性，以及首次同步失败后重试仍按首次规则、`debounceMs` 配置实际生效。
 
 复核中修复并复测确认的问题：
 
@@ -210,6 +446,9 @@ bookmark-sync-extension/
 | 配置未通过校验时输入不落盘，关闭弹窗即丢失 | `config.js`、`background.js`、`popup.js` | 中（数据丢失） | 无效输入立即写草稿、有效保存原子清草稿、存储失败明确提示且保留表单 |
 | 首次同步远端无 `bookmarks.json` 且本地无书签变更时不创建文件 | `lib/sync.js` `runSync` | 中（功能缺失） | 首次同步缺文件直接创建并推送完整本地树 |
 | 同步期间无进度反馈，用户无法判断是否仍在执行 | `lib/sync.js`、`background.js`、`popup.js` | 中（体验） | 分阶段百分比消息推送、进度条与失败终态展示 |
+| 首次同步失败后重试被误判为双向冲突，反向覆盖远端 | `lib/sync.js` `runSync` | 高（数据丢失） | `firstSync` 改以 `baseTree` 与 `remoteSha` 同时为空判定，不再受失败时写入的 `lastSyncAt` 影响 |
+| `debounceMs` 配置项未生效，去抖硬编码 3000ms | `background.js`、`lib/util.js` | 低（配置无效） | 启动与保存配置时刷新缓存，去抖延迟读取缓存值 |
+| 构建脚本只校验图标宽度未校验高度 | `build.py` | 低（校验缺口） | PNG 尺寸校验改为宽高元组比对 |
 
 在 Windows / Node 22 环境下可复现：
 
@@ -230,12 +469,12 @@ python build.py
 python -c "import json; m=json.load(open('dist/universal/manifest.json',encoding='utf-8')); assert m['manifest_version']==3 and m['background']['service_worker'] and m['background']['scripts']; print('unified manifest OK')"
 ```
 
-### 5.2 人工端到端验证清单
+### 9.2 人工端到端验证清单
 
-> 必须在真实浏览器与真实私人仓库中完成；以下项目无法仅靠静态检查替代。
+> 必须在真实浏览器与真实私有仓库中完成；以下项目无法仅靠静态检查替代。
 
 1. **同包加载**：同一个 `dist/universal` 目录分别在 Chrome 与 Firefox 加载成功，后台页均正常启动。
-2. **连接验证**：填入自己的仓库与 classic PAT 后，测试连接应显示 Private、push 权限、`bookmarks.json` 不存在（首次同步会创建）。
+2. **连接验证**：填入自己的仓库与 classic PAT 后，测试连接应显示可访问、有写权限、`bookmarks.json` 不存在（首次同步会创建）。
 3. **原有文件保护**：若 `bookmarks.json` 已有非本插件内容，首次同步后确认 `backups/initial-*.json` 中存在原内容。
 4. **首次推送**：浏览器 A 添加 2 个书签 + 1 个文件夹并调整顺序 → 立即同步 → GitHub 上打开 `bookmarks.json` 核对层级、标题、URL、顺序。
 5. **跨浏览器拉取**：浏览器 B 立即同步 → 书签树与 A 一致。
@@ -247,7 +486,7 @@ python -c "import json; m=json.load(open('dist/universal/manifest.json',encoding
 11. **自动同步**：开启自动同步，修改书签后等待（默认 3 秒防抖 + 15 分钟闹钟轮询），确认徽章与状态更新。
 12. **错误处理**：把 token 改为无效值 → 同步应显示明确错误且不删除本地书签；恢复 token 后可继续同步。
 
-### 5.3 未验证边界（基础版本）
+### 9.3 未验证边界
 
 - 未在 Safari 验证：Safari 需要不同的签名与打包流程，且 `bookmarks` API 行为未实测。
 - 未实现真正的 Web Crypto 加密 token；token 存于 `storage.local`（扩展隔离但非系统密钥库）。
@@ -256,7 +495,7 @@ python -c "import json; m=json.load(open('dist/universal/manifest.json',encoding
 
 ---
 
-## 6. 浏览器兼容差异
+## 10. 浏览器兼容差异
 
 | 项目 | Chrome / Edge | Firefox | Safari（未验证） |
 |---|---|---|---|
@@ -265,7 +504,7 @@ python -c "import json; m=json.load(open('dist/universal/manifest.json',encoding
 | 后台声明来源 | `background.service_worker` | `background.scripts` | `background.scripts` |
 | API 命名空间 | `chrome.*`（新版本亦支持 `browser.*`） | `browser.*` Promise | `browser.*` Promise |
 | 适配方式 | `lib/api.js` 统一为 Promise，无需 polyfill | 同左 | 同左 |
-| 工具栏 | `action` | `action` | `action` |
+| 工具栏 | `action`（多尺寸渐变图标） | `action` + `theme_icons` 深浅主题变体 | `action`（未验证主题变体） |
 | host 权限 | `host_permissions` | `host_permissions` | `host_permissions` |
 | 书签根 ID | `1/2/3` | 字符串 ID（如 `toolbar_____`） | 与 Firefox 类似 |
 | 根 ID 处理 | 不硬编码，按 UUID 映射 + 标题匹配 | 同左 | 同左 |
@@ -276,7 +515,24 @@ python -c "import json; m=json.load(open('dist/universal/manifest.json',encoding
 
 ---
 
-## 7. 后续可配置项
+## 11. 故障排查
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `403 Resource not accessible by personal access token` | 令牌对该仓库缺少写权限，不是仓库不存在或路径错误 | classic PAT 勾完整 `repo`；fine-grained PAT 把 Contents 设为 `Read and write`；组织仓库再点 Authorize SSO。先用「测试连接」查看提示 |
+| 测试连接显示无写权限 | GitHub 返回 `permissions.push=false` | 按上一条调整令牌权限后重试；测试连接不会产生写入 |
+| 首次同步后本地书签被远端替换 | 远端已有本插件格式的书签，且本地也非空 | 这是设计行为：首次同步远端优先，本地已留快照。可在弹窗备份列表中恢复；后续同步按三方比较处理 |
+| 同步一直显示进行中 | 进度消息未被弹窗接收（例如后台被浏览器休眠） | 关闭再打开弹窗查看状态；刷新扩展后重试；不要连续点击同步 |
+| 弹窗提示「存在尚未生效的暂存配置」 | 上次输入未通过校验，已保存为草稿 | 打开弹窗补全/修正配置并再次「保存配置」 |
+| 保存失败但输入还在 | 存储写入异常，表单被刻意保留 | 直接点击「保存配置」重试，输入未丢失 |
+| Firefox 重启后插件消失 | 使用「临时载入附加组件」 | 开发期用 `web-ext run --source-dir dist/universal`；正式使用需签名安装 |
+| 远端被他人改动后同步失败（409） | 多端并发，SHA 不匹配 | 等待对方完成后重新同步；改动不会静默覆盖 |
+| 状态显示「本地已变化，等待手动同步」 | 自动同步关闭时书签发生变化 | 点击「立即同步」，或开启自动同步并保存配置 |
+| 图标在深色工具栏看不清 | 浏览器未使用主题变体 | Chromium 使用自带对比度的渐变图标；Firefox 通过 `theme_icons` 自动切换 |
+
+---
+
+## 12. 后续可配置项
 
 1. **凭据安全**：Web Crypto + 用户口令派生密钥加密 token；或用原生 messaging 接入系统钥匙串。
 2. **OAuth**：接入 GitHub OAuth App + 后端 token 交换，替代 PAT。
@@ -286,12 +542,3 @@ python -c "import json; m=json.load(open('dist/universal/manifest.json',encoding
 6. **存储后端**：Git 原生提交（GitHub Git Data API）替代 Contents API，支持更细粒度 diff 与更完整的提交历史。
 7. **可观测性**：同步日志面板、失败重试次数与退避、导入/导出本地快照。
 8. **Safari 正式支持**：使用 `web-ext convert` / Xcode 签名，并实测 `bookmarks` 权限行为。
-
----
-
-## 8. 安全与隐私说明
-
-- Token 只在浏览器扩展本地存储与 `api.github.com` 请求头中出现；不会写入仓库文件、不会出现在日志或 UI 明文（UI 脱敏显示）。
-- 同步文件可能包含完整书签标题与 URL，请使用 **Private** 仓库并仅授权必要 token。
-- classic PAT 的 `repo` scope 权限较宽；建议使用专用 GitHub 账号或专用 token，并定期轮换。
-- 所有覆盖性写操作前都会生成备份；如发现异常，优先从 `backups/` 或扩展本地快照回滚，再排查配置。
