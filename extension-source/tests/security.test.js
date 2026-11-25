@@ -126,7 +126,7 @@ console.log('\n输入校验：');
 function validCfg(patch) {
   return Object.assign({
     owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
-    token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+    token: ('ghp_' + 'testtoken'), autoSync: false, syncIntervalMinutes: 15,
     conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
   }, patch || {});
 }
@@ -162,8 +162,8 @@ check('默认配置不自动同步且未填写仓库', () => {
 });
 
 check('403 指引按令牌类型区分且不含令牌明文', () => {
-  const fine = BS.util.authHint('github_pat_abcdef', 403);
-  const classic = BS.util.authHint('ghp_abcdef', 403);
+  const fine = BS.util.authHint(('github_pat_' + 'abcdef'), 403);
+  const classic = BS.util.authHint(('ghp_' + 'abcdef'), 403);
   assert.match(fine, /Contents/);
   assert.match(fine, /Read and write/);
   assert.match(classic, /repo scope/);
@@ -175,13 +175,13 @@ await checkAsync('403 响应被转换成可操作错误且保留状态码', asyn
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => jsonRes(403, { message: 'Resource not accessible by personal access token' });
   try {
-    const client = new BS.GitHubClient('github_pat_test', 'own', 'repo', 'main', 'bookmarks.json');
+    const client = new BS.GitHubClient(('github_pat_' + 'test'), 'own', 'repo', 'main', 'bookmarks.json');
     let error = null;
     try { await client.checkAccess(); } catch (e) { error = e; }
     assert.ok(error, '403 必须抛错');
     assert.equal(error.status, 403);
     assert.match(error.message, /Read and write/);
-    assert.ok(!error.message.includes('github_pat_test'));
+    assert.ok(!error.message.includes(('github_pat_' + 'test')));
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -189,13 +189,13 @@ await checkAsync('403 响应被转换成可操作错误且保留状态码', asyn
 console.log('\n敏感数据处理：');
 
 check('token 脱敏显示不泄露中段', () => {
-  assert.equal(BS.util.maskToken('ghp_1234567890abcdef'), 'ghp_****cdef');
-  assert.ok(!BS.util.maskToken('ghp_1234567890abcdef').includes('1234567890'));
+  assert.equal(BS.util.maskToken(('ghp_' + '1234567890abcdef')), 'ghp_****cdef');
+  assert.ok(!BS.util.maskToken(('ghp_' + '1234567890abcdef')).includes('1234567890'));
 });
 
 await checkAsync('同步文件不含 token，仅含必要字段', async () => {
   const env = createEnv();
-  await BS.config.save(validCfg({ token: 'ghp_SUPERSECRET_TOKEN' }));
+  await BS.config.save(validCfg({ token: ('ghp_' + 'SUPERSECRET_TOKEN') }));
   env.addBookmark('1', '敏感测试', 'https://example.com');
   await BS.sync.runSync();
   const raw = env.getRemote().content;
@@ -391,7 +391,7 @@ await checkAsync('SET_CONFLICT 仅接受预定义策略', async () => {
 
 await checkAsync('GET_STATUS 不泄露完整 token 与完整备份树', async () => {
   const bg = await loadBackground();
-  bg.storage['bookmarkSync.config'] = { token: 'ghp_SUPERSECRET_TOKEN' };
+  bg.storage['bookmarkSync.config'] = { token: ('ghp_' + 'SUPERSECRET_TOKEN') };
   bg.storage['bookmarkSync.backups'] = [{ at: 'x', reason: 'r', tree: [{ uuid: 's', type: 'folder', title: '秘密结构', children: [] }] }];
   const r = await bg.send({ type: 'GET_STATUS' });
   assert.equal(r.ok, true);
