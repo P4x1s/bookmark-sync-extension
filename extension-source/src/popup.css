@@ -98,6 +98,35 @@ body::-webkit-scrollbar-thumb { background: #3a404b; border-radius: 8px; }
 .status-detail { color: var(--muted); font-size: 11px; margin-top: 2px; word-break: break-word; }
 .status-meta { color: #6f7887; font-size: 10px; margin-top: 4px; }
 
+.progress-box {
+  padding: 10px 12px;
+  border: 1px solid rgba(91, 156, 255, .45);
+  border-radius: var(--radius);
+  background: rgba(91, 156, 255, .08);
+  margin-bottom: 10px;
+}
+.progress-box.success { border-color: rgba(55, 201, 139, .55); background: rgba(55, 201, 139, .08); }
+.progress-box.failed { border-color: rgba(255, 107, 107, .55); background: rgba(255, 107, 107, .08); }
+.progress-head { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
+.progress-head span:last-child { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 650; }
+.progress-track {
+  height: 6px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #343a45;
+}
+.progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width .18s ease;
+}
+.progress-box.success .progress-bar { background: var(--ok); }
+.progress-box.failed .progress-bar { background: var(--err); }
+.progress-detail { margin-top: 5px; color: var(--muted); font-size: 10.5px; word-break: break-word; }
+
 .notice {
   padding: 11px 12px;
   border: 1px solid rgba(255, 180, 84, .5);
