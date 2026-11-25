@@ -102,6 +102,13 @@
     }).catch(function () { /* ignore */ });
   }
 
+  // 去抖时长随配置变化，但事件本身不读存储：在启动与保存配置时更新缓存。
+  var cachedDebounceMs = 3000;
+  function refreshDebounce(cfg) {
+    var n = Number(cfg && cfg.debounceMs);
+    cachedDebounceMs = (isFinite(n) && n >= 0 && n <= 60000) ? n : 3000;
+  }
+
   var debouncedLocalChange = util.debounce(function () {
     if (sync.applying) return; // 同步引擎写入本地书签时不回环触发。
     config.load().then(function (cfg) {
@@ -117,7 +124,7 @@
         return api.setBadge('•', '#455a64');
       });
     }).catch(function () { /* ignore */ });
-  }, 3000);
+  }, function () { return cachedDebounceMs; });
 
   function onLocalBookmarkChange() {
     if (sync.applying) return;
@@ -215,6 +222,7 @@
               });
               return;
             }
+            refreshDebounce(nextConfig);
             await setupAlarm(nextConfig);
             sendResponse({
               ok: true,
@@ -292,6 +300,9 @@
     });
   }
 
-  // service worker 首次启动时也要建立闹钟。
-  config.load().then(setupAlarm).then(refreshBadge).catch(function () { /* ignore */ });
+  // service worker 首次启动时也要建立闹钟，并同步去抖时长。
+  config.load().then(function (cfg) {
+    refreshDebounce(cfg);
+    return setupAlarm(cfg);
+  }).then(refreshBadge).catch(function () { /* ignore */ });
 })(globalThis);
