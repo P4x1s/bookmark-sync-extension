@@ -86,11 +86,31 @@
     return token.slice(0, 4) + '****' + token.slice(-4);
   };
 
+  util.tokenKind = function tokenKind(token) {
+    var t = String(token || '');
+    if (/^github_pat_/.test(t)) return 'fine-grained';
+    if (/^(ghp_|gho_)/.test(t)) return 'classic';
+    return 'unknown';
+  };
+
   util.isClassicToken = function isClassicToken(token) {
-    return /^(ghp_|gho_)/.test(String(token || ''));
+    return util.tokenKind(token) === 'classic';
   };
 
   util.isFineGrainedToken = function isFineGrainedToken(token) {
-    return /^github_pat_/.test(String(token || ''));
+    return util.tokenKind(token) === 'fine-grained';
+  };
+
+  // 403 的可操作指引。区分令牌类型，避免只报原始英文错误。
+  util.authHint = function authHint(token, status) {
+    if (Number(status) !== 403) return '';
+    var kind = util.tokenKind(token);
+    if (kind === 'fine-grained') {
+      return 'fine-grained PAT 需在令牌设置中把 Repository access 勾选此私有仓库，并将 Repository permissions → Contents 设为 Read and write（仅 Read 会在写入时返回 403）；若仓库属于启用 SSO 的组织，还需在令牌页面授权 SSO';
+    }
+    if (kind === 'classic') {
+      return 'classic PAT 需勾选完整 repo scope（仅 public_repo 无法读写私有仓库）；若仓库属于启用 SSO 的组织，还需在令牌页面点击 Authorize SSO';
+    }
+    return '请确认令牌已授予此私有仓库的读写权限，或改用 classic PAT（勾选 repo scope）';
   };
 })(globalThis);
