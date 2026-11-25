@@ -35,6 +35,12 @@
     'syncIntervalMinutes', 'debounceMs', 'conflictStrategy', 'lowMemoryMode', 'backupCount'];
   var CONFLICT_STRATEGIES = ['backup-then-local', 'prefer-remote'];
 
+  // 同步引擎把阶段进度推送到所有扩展页面；弹窗打开时可实时显示进度条。
+  sync.setProgressHandler(function (payload) {
+    if (!payload) return Promise.resolve();
+    return api.sendMessage(payload).catch(function () { /* 弹窗未打开时忽略 */ });
+  });
+
   function pickConfig(patch) {
     var out = {};
     var src = patch || {};
@@ -154,16 +160,19 @@
         var type = message && message.type;
         try {
           if (type === 'PING') {
-            sendResponse({ ok: true, version: '0.3.3' });
+            sendResponse({ ok: true, version: '0.3.4' });
             return;
           }
           if (type === 'GET_STATUS') {
             var cfg = await config.load();
+            var draft = await config.loadDraft();
             var state = await sync.loadState();
             var backupMeta = await sync.loadBackupMeta();
             sendResponse({
               ok: true,
               config: Object.assign({}, cfg, { token: util.maskToken(cfg.token) }),
+              draft: draft,
+              hasDraft: !!draft,
               state: state,
               backups: backupMeta
             });
@@ -176,13 +185,40 @@
             var candidate = Object.assign(await config.load(), patch);
             var cfgCheck = config.validate(candidate);
             if (!cfgCheck.valid) {
-              sendResponse({ ok: false, error: '配置无效：' + cfgCheck.errors.join('；') });
+              // 输入无效时也必须立即落盘为草稿，避免关闭弹窗后丢失用户已填内容。
+              try {
+                await config.saveDraft(patch);
+              } catch (saveError) {
+                sendResponse({
+                  ok: false,
+                  saveFailed: true,
+                  error: '保存失败（本次输入未丢失，请重试）：' + (saveError && saveError.message ? saveError.message : String(saveError))
+                });
+                return;
+              }
+              sendResponse({
+                ok: false,
+                draftSaved: true,
+                error: '配置尚未生效：' + cfgCheck.errors.join('；'),
+                warnings: cfgCheck.warnings
+              });
               return;
             }
-            var nextConfig = await config.save(patch);
+            var nextConfig;
+            try {
+              nextConfig = await config.commit(patch);
+            } catch (saveError) {
+              sendResponse({
+                ok: false,
+                saveFailed: true,
+                error: '保存失败（本次输入未丢失，请重试）：' + (saveError && saveError.message ? saveError.message : String(saveError))
+              });
+              return;
+            }
             await setupAlarm(nextConfig);
             sendResponse({
               ok: true,
+              saved: true,
               config: Object.assign({}, nextConfig, { token: util.maskToken(nextConfig.token) }),
               warnings: cfgCheck.warnings
             });
