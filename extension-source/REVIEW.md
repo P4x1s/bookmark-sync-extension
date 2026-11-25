@@ -1,4 +1,8 @@
-# 项目全面复核报告（v0.3.2）
+# 项目全面复核报告（v0.3.2，v0.3.3 增补见文末）
+
+> **v0.3.3 增补**：安装后默认零写入（`autoSync: false`、未配置不建闹钟、安装时不写 `deviceId`/状态、未配置时书签变化不写状态）；403 错误按 classic / fine-grained 令牌给出 `repo scope`、`Contents: Read and write` 与 SSO 指引；测试连接预检 `permissions.push` 且全程只读。新增 10 项测试（冒烟 17→23，安全 15→18），总计 55 项通过。
+
+
 
 复核日期：2026-11-24
 复核范围：`bookmark-sync-extension/` 全部 27 个文件（源码 11、测试 4、README、构建脚本、dist 产物、zip），含代码、配置、资源、插件入口与依赖面。
