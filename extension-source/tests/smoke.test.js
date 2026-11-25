@@ -137,7 +137,7 @@ function createBrowserEnv(style) {
       onMessage: makeEvent('message'),
       onInstalled: makeEvent('installed'),
       onStartup: makeEvent('startup'),
-      getManifest: () => ({ version: '0.3.3' }),
+      getManifest: () => ({ version: '0.3.4' }),
       sendMessage: (message, cb) => { deliver(message).then(r => { if (cb) cb(r); }); },
     },
     storage: {
@@ -174,7 +174,7 @@ function createBrowserEnv(style) {
       onMessage: makeEvent('message'),
       onInstalled: makeEvent('installed'),
       onStartup: makeEvent('startup'),
-      getManifest: () => ({ version: '0.3.3' }),
+      getManifest: () => ({ version: '0.3.4' }),
       sendMessage: async message => deliver(message),
     },
     storage: {
@@ -314,7 +314,7 @@ async function main() {
     await checkAsync(style + ' PING / GET_STATUS 消息可用', async () => {
       const ping = await dispatch(env, { type: 'PING' });
       assert.equal(ping.ok, true);
-      assert.equal(ping.version, '0.3.3');
+      assert.equal(ping.version, '0.3.4');
       const status = await dispatch(env, { type: 'GET_STATUS' });
       assert.equal(status.ok, true);
       assert.ok(status.config.token === '' || status.config.token.includes('****'), 'token 未脱敏');
@@ -451,13 +451,14 @@ async function main() {
       if (!elements[id]) {
         elements[id] = {
           id, value: '', textContent: '', className: '', type: id === 'token' ? 'password' : 'text',
-          checked: false, disabled: false, children: [],
+          checked: false, disabled: false, children: [], style: {},
           addEventListener() {}, appendChild(c) { this.children.push(c); },
         };
       }
       return elements[id];
     }
     const docListeners = {};
+    const popupMessageListeners = [];
     const sandbox = {
       console, TextEncoder, TextDecoder, Uint8Array, URL,
       btoa: s => Buffer.from(s, 'binary').toString('base64'),
@@ -474,7 +475,7 @@ async function main() {
     sandbox.browser = {
       runtime: {
         id: 'popup-smoke',
-        onMessage: { addListener() {} },
+        onMessage: { addListener: fn => popupMessageListeners.push(fn) },
         sendMessage: async message => {
           if (message.type === 'GET_STATUS') {
             return {
@@ -498,6 +499,13 @@ async function main() {
     assert.equal(typeof docListeners.DOMContentLoaded, 'function');
     docListeners.DOMContentLoaded();
     assert.ok(el('btnSync').disabled === false, '同步按钮应可用');
+    assert.ok(popupMessageListeners.length >= 1, '弹窗应监听后台进度消息');
+    popupMessageListeners.forEach(fn => fn({
+      type: 'SYNC_PROGRESS', percent: 42, phase: 'write', detail: '写入中', state: 'running',
+    }));
+    assert.equal(el('progressBar').style.width, '42%');
+    assert.equal(el('progressPercent').textContent, '42%');
+    assert.equal(el('progressBox').className.indexOf('hidden'), -1);
   });
 
   console.log(`\n完成：${passed} 项通过，${failures.length} 项失败`);
