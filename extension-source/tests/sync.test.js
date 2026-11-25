@@ -256,6 +256,35 @@ async function main() {
     assert.match(r.message, /创建 bookmarks\.json/);
   });
 
+  await test('首次同步失败后重试仍按首次规则采用远端', async () => {
+    const e5 = createEnv();
+    await BS.config.save({
+      owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json',
+      token: 'ghp_testtoken', autoSync: false, syncIntervalMinutes: 15,
+      conflictStrategy: 'backup-then-local', lowMemoryMode: true, backupCount: 1,
+    });
+    e5.setRemoteTree([{
+      uuid: 'remote-root', type: 'folder', title: '远端根',
+      children: [{ uuid: 'remote-keep', type: 'url', title: '远端重要书签', url: 'https://important.example' }],
+    }]);
+    e5.addBookmark('1', '本地书签', 'https://local.example');
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('temporary network failure'); };
+    let failed;
+    try { failed = await BS.sync.runSync(); }
+    finally { globalThis.fetch = originalFetch; }
+    assert.equal(failed.ok, false, '第一次同步应失败');
+    const stateAfterFail = await BS.sync.loadState();
+    assert.ok(stateAfterFail.lastSyncAt, '失败路径应记录时间');
+    assert.equal(stateAfterFail.baseTree.length, 0, '失败时基准树应为空');
+
+    const retried = await BS.sync.runSync();
+    assert.equal(retried.status, 'pulled', '重试应仍按首次规则采用远端，实际=' + retried.status);
+    const titles = Object.values(e5.nodes).map(n => n.title);
+    assert.ok(titles.includes('远端重要书签'), '远端书签应被拉取到本地');
+  });
+
   await test('同步进度按阶段上报到 100% 完成', async () => {
     const e4 = createEnv();
     await BS.config.save({
