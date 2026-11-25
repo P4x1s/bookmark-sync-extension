@@ -137,7 +137,7 @@ function createBrowserEnv(style) {
       onMessage: makeEvent('message'),
       onInstalled: makeEvent('installed'),
       onStartup: makeEvent('startup'),
-      getManifest: () => ({ version: '0.3.2' }),
+      getManifest: () => ({ version: '0.3.3' }),
       sendMessage: (message, cb) => { deliver(message).then(r => { if (cb) cb(r); }); },
     },
     storage: {
@@ -174,7 +174,7 @@ function createBrowserEnv(style) {
       onMessage: makeEvent('message'),
       onInstalled: makeEvent('installed'),
       onStartup: makeEvent('startup'),
-      getManifest: () => ({ version: '0.3.2' }),
+      getManifest: () => ({ version: '0.3.3' }),
       sendMessage: async message => deliver(message),
     },
     storage: {
@@ -314,7 +314,7 @@ async function main() {
     await checkAsync(style + ' PING / GET_STATUS 消息可用', async () => {
       const ping = await dispatch(env, { type: 'PING' });
       assert.equal(ping.ok, true);
-      assert.equal(ping.version, '0.3.2');
+      assert.equal(ping.version, '0.3.3');
       const status = await dispatch(env, { type: 'GET_STATUS' });
       assert.equal(status.ok, true);
       assert.ok(status.config.token === '' || status.config.token.includes('****'), 'token 未脱敏');
@@ -362,6 +362,87 @@ async function main() {
       assert.match(result.error, /401|Bad credentials/);
     });
   }
+
+  console.log('\n安装默认零写入与授权诊断：');
+
+  async function freshBackground(fetchImpl) {
+    const env = createBrowserEnv('firefox');
+    if (fetchImpl) env.sandbox.fetch = fetchImpl;
+    const m = JSON.parse(read('dist/universal/manifest.json'));
+    m.background.scripts.forEach(f => vm.runInContext(read('dist/universal/' + f), env.context, { filename: f }));
+    return env;
+  }
+
+  await checkAsync('安装后未配置：不写配置、不建闹钟、不写状态', async () => {
+    const env = await freshBackground();
+    assert.equal(env.store['bookmarkSync.config'], undefined);
+    assert.equal(env.store['bookmarkSync.state'], undefined);
+    assert.equal(env.store['__alarm'], undefined);
+    // 本地书签变化也不应触发任何存储写入。
+    env.listeners.created.forEach(fn => fn({ id: 'x' }));
+    await new Promise(r => setTimeout(r, 3200));
+    assert.equal(env.store['bookmarkSync.state'], undefined);
+    assert.equal(env.requests.filter(r => r.init && r.init.method === 'PUT').length, 0);
+  });
+
+  await checkAsync('未配置时手动同步被拒绝且不发请求', async () => {
+    const env = await freshBackground();
+    const r = await dispatch(env, { type: 'SYNC_NOW' });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /配置无效/);
+    assert.equal(env.requests.length, 0);
+  });
+
+  await checkAsync('显式开启自动同步才建立闹钟，且必须配置完整', async () => {
+    const env = await freshBackground();
+    const bad = await dispatch(env, {
+      type: 'SAVE_CONFIG', config: { owner: 'example', repo: 'private-repo', token: '', autoSync: true },
+    });
+    assert.equal(bad.ok, false);
+    assert.equal(env.store['__alarm'], undefined);
+    const good = await dispatch(env, {
+      type: 'SAVE_CONFIG', config: { owner: 'example', repo: 'private-repo', token: 'ghp_x', autoSync: true },
+    });
+    assert.equal(good.ok, true);
+    assert.ok(env.store['__alarm'], '完整配置并开启后应建立闹钟');
+  });
+
+  await checkAsync('测试连接只发 GET，不写入仓库', async () => {
+    const env = await freshBackground();
+    const r = await dispatch(env, {
+      type: 'TEST_CONNECTION',
+      config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'ghp_x' },
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(env.requests.filter(x => x.init && x.init.method === 'PUT').length, 0);
+  });
+
+  await checkAsync('无写权限返回可操作指引（fine-grained PAT）', async () => {
+    const env = await freshBackground(async () => jsonRes(200, {
+      private: true, default_branch: 'main', permissions: { push: false }, full_name: 'example/private-repo',
+    }));
+    const r = await dispatch(env, {
+      type: 'TEST_CONNECTION',
+      config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'github_pat_x' },
+    });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /Contents/);
+    assert.match(r.error, /Read and write/);
+  });
+
+  await checkAsync('403 原始错误被翻译为按令牌类型区分的指引', async () => {
+    const env = await freshBackground(async () => jsonRes(403, {
+      message: 'Resource not accessible by personal access token',
+    }));
+    const r = await dispatch(env, {
+      type: 'TEST_CONNECTION',
+      config: { owner: 'example', repo: 'private-repo', branch: 'main', path: 'bookmarks.json', token: 'github_pat_x' },
+    });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /403/);
+    assert.match(r.error, /Read and write/);
+    assert.equal(env.requests.filter(x => x.init && x.init.method === 'PUT').length, 0);
+  });
 
   console.log('\n弹窗入口：');
   check('popup.js 在 DOM 环境中可加载并绑定事件', () => {
