@@ -10,9 +10,9 @@
   var CONFIG_KEY = 'bookmarkSync.config';
 
   var DEFAULT_CONFIG = {
-    // 默认指向专用的私有同步仓库；该仓库匿名访问返回 404，需 classic PAT（repo 权限）授权。
-    owner: 'P4x1s',
-    repo: 'bookmark-sync-vault',
+    // 仓库信息由使用者自行填写；仅支持 classic PAT（repo 权限）授权。
+    owner: '',
+    repo: '',
     branch: 'main',
     path: 'bookmarks.json',
     token: '',
