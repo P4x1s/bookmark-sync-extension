@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Bookmark Sync via GitHub",
+  "name": "bookmark-sync-extension",
   "short_name": "Bookmark Sync",
   "version": "1.0.0",
   "description": "通过 GitHub 私人仓库双向同步浏览器收藏夹（单包多浏览器 · 低内存优化版）",

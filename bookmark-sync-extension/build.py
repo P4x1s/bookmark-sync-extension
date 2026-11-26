@@ -12,8 +12,8 @@ Chrome 121+ 会忽略 MV3 manifest 中的 background.scripts，Firefox 使用 sc
   python build.py
 
 产物：
-  dist/universal/
-  bookmark-sync-universal.zip
+  dist/extension/
+  bookmark-sync-extension.zip
 """
 import json
 import shutil
@@ -24,8 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 DIST = ROOT / "dist"
-TARGET = DIST / "universal"
-ZIP_PATH = ROOT / "bookmark-sync-universal.zip"
+TARGET = DIST / "extension"
+ZIP_PATH = ROOT / "bookmark-sync-extension.zip"
 
 # 旧版按浏览器拆包的产物，构建时清理，避免混淆。
 LEGACY_DIRS = [DIST / "chrome", DIST / "edge", DIST / "firefox"]

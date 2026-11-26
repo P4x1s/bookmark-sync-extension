@@ -12,7 +12,7 @@ const vm = require('node:vm');
 
 const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
-const DIST = path.join(ROOT, 'dist', 'universal');
+const DIST = path.join(ROOT, 'dist', 'extension');
 let passed = 0;
 const failures = [];
 
@@ -236,7 +236,7 @@ function createBrowserEnv(style) {
     sandbox.chrome = chromeStyle;
     sandbox.importScripts = function () {
       for (const rel of arguments) {
-        vm.runInContext(fs.readFileSync(path.join(ROOT, 'dist', 'universal', rel), 'utf8'), context, { filename: rel });
+        vm.runInContext(fs.readFileSync(path.join(ROOT, 'dist', 'extension', rel), 'utf8'), context, { filename: rel });
       }
     };
   } else {
@@ -263,7 +263,7 @@ async function main() {
   console.log('安装 / 加载冒烟测试：');
 
   check('manifest 合法且为唯一清单', () => {
-    const m = JSON.parse(read('dist/universal/manifest.json'));
+    const m = JSON.parse(read('dist/extension/manifest.json'));
     assert.equal(m.manifest_version, 3);
     assert.ok(m.background.service_worker);
     assert.ok(Array.isArray(m.background.scripts) && m.background.scripts.length >= 7);
@@ -271,7 +271,7 @@ async function main() {
   });
 
   check('manifest 引用的全部文件存在', () => {
-    const m = JSON.parse(read('dist/universal/manifest.json'));
+    const m = JSON.parse(read('dist/extension/manifest.json'));
     const iconRefs = [
       ...Object.values(m.icons || {}),
       ...Object.values(m.action.default_icon || {}),
@@ -279,14 +279,14 @@ async function main() {
     ];
     const refs = [m.background.service_worker, ...m.background.scripts, m.action.default_popup, ...iconRefs];
     refs.forEach(r => assert.ok(fs.existsSync(path.join(DIST, r)), '缺少文件 ' + r));
-    const html = read('dist/universal/popup.html');
+    const html = read('dist/extension/popup.html');
     [...html.matchAll(/(?:src|href)="([^"]+)"/g)].forEach(mm => {
       assert.ok(fs.existsSync(path.join(DIST, mm[1])), 'popup 引用缺少 ' + mm[1]);
     });
   });
 
   check('图标覆盖多尺寸并包含深浅主题变体', () => {
-    const m = JSON.parse(read('dist/universal/manifest.json'));
+    const m = JSON.parse(read('dist/extension/manifest.json'));
     const sorted = values => values.map(Number).sort((a, b) => a - b);
     assert.deepEqual(sorted(Object.keys(m.icons || {})), [16, 32, 48, 64, 128]);
     assert.deepEqual(sorted(Object.keys(m.action.default_icon || {})), [16, 24, 32, 48, 64, 128]);
@@ -318,15 +318,15 @@ async function main() {
   check('dist 与 src 源码逐字节一致（manifest 除外）', () => {
     const files = ['background.js', 'popup.html', 'popup.css', 'popup.js',
       'lib/util.js', 'lib/api.js', 'lib/config.js', 'lib/github.js', 'lib/model.js', 'lib/sync.js'];
-    files.forEach(f => assert.equal(read('dist/universal/' + f), read('src/' + f), '不一致：' + f));
+    files.forEach(f => assert.equal(read('dist/extension/' + f), read('src/' + f), '不一致：' + f));
     fs.readdirSync(path.join(SRC, 'icons')).forEach(f => {
-      assert.equal(read('dist/universal/icons/' + f), read('src/icons/' + f), '不一致：icons/' + f);
+      assert.equal(read('dist/extension/icons/' + f), read('src/icons/' + f), '不一致：icons/' + f);
     });
   });
 
   check('zip 内容与 dist 文件集合一致', () => {
     const zlib = require('node:zlib');
-    const buf = fs.readFileSync(path.join(ROOT, 'bookmark-sync-universal.zip'));
+    const buf = fs.readFileSync(path.join(ROOT, 'bookmark-sync-extension.zip'));
     // 只核对关键文件存在，不引入额外解压依赖
     for (const f of ['manifest.json', 'background.js', 'popup.html', 'lib/config.js', 'lib/sync.js']) {
       assert.ok(buf.includes(Buffer.from(f)), 'zip 内缺少 ' + f);
@@ -339,10 +339,10 @@ async function main() {
     const env = createBrowserEnv(style);
     await checkAsync(style + ' 后台脚本加载并注册事件', async () => {
       if (style === 'chromium') {
-        vm.runInContext(read('dist/universal/background.js'), env.context, { filename: 'background.js' });
+        vm.runInContext(read('dist/extension/background.js'), env.context, { filename: 'background.js' });
       } else {
-        const m = JSON.parse(read('dist/universal/manifest.json'));
-        m.background.scripts.forEach(f => vm.runInContext(read('dist/universal/' + f), env.context, { filename: f }));
+        const m = JSON.parse(read('dist/extension/manifest.json'));
+        m.background.scripts.forEach(f => vm.runInContext(read('dist/extension/' + f), env.context, { filename: f }));
       }
       assert.ok(env.listeners.message.length >= 1, '未注册消息监听');
       assert.ok(env.listeners.alarm.length >= 1, '未注册闹钟监听');
@@ -406,8 +406,8 @@ async function main() {
   async function freshBackground(fetchImpl) {
     const env = createBrowserEnv('firefox');
     if (fetchImpl) env.sandbox.fetch = fetchImpl;
-    const m = JSON.parse(read('dist/universal/manifest.json'));
-    m.background.scripts.forEach(f => vm.runInContext(read('dist/universal/' + f), env.context, { filename: f }));
+    const m = JSON.parse(read('dist/extension/manifest.json'));
+    m.background.scripts.forEach(f => vm.runInContext(read('dist/extension/' + f), env.context, { filename: f }));
     return env;
   }
 
@@ -547,7 +547,7 @@ async function main() {
       action: null,
     };
     for (const f of ['lib/util.js', 'lib/api.js', 'lib/config.js', 'lib/github.js', 'lib/model.js', 'lib/sync.js', 'popup.js']) {
-      vm.runInContext(read('dist/universal/' + f), sandbox, { filename: f });
+      vm.runInContext(read('dist/extension/' + f), sandbox, { filename: f });
     }
     assert.equal(typeof docListeners.DOMContentLoaded, 'function');
     docListeners.DOMContentLoaded();

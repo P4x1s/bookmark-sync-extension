@@ -1,6 +1,6 @@
 # bookmark-sync-extension（v1.0.0 · 低内存优化）
 
-> **当前状态**：v1.0.0 为当前发布版本，包含缓存导致删除回滚与二次同步 409 的数据一致性修复。当前唯一分发物为 `bookmark-sync-universal.zip`，对应 GitHub Release `v1.0.0`（Latest）。
+> **当前状态**：v1.0.0 为当前发布版本，包含缓存导致删除回滚与二次同步 409 的数据一致性修复。当前唯一分发物为 `bookmark-sync-extension.zip`，对应 GitHub Release `v1.0.0`（Latest）。
 
 一个插件包同时兼容 **Chrome、Edge、Firefox** 及多数 Chromium 系浏览器。它通过使用者自己授权的 **GitHub 私有仓库**保存浏览器的**书签/收藏夹树**，实现新增、修改、删除、移动、重命名、层级与顺序的双向同步。
 
@@ -109,11 +109,11 @@ bookmark-sync-extension/
 │  ├─ smoke.test.js            # 安装/加载/消息/核心功能冒烟测试（双浏览器路径）
 │  └─ security.test.js         # 输入校验、权限、敏感数据、危险逻辑安全测试
 ├─ dist/
-│  └─ universal/               # 唯一构建产物（一个插件）
-└─ bookmark-sync-universal.zip # 分发压缩包
+│  └─ extension/               # 唯一构建产物（一个插件）
+└─ bookmark-sync-extension.zip # 分发压缩包
 ```
 
-生成产物：`bookmark-sync-universal.zip`。图标统一复用「云 + 上下双向箭头」语义；Chromium 系使用自带对比度的渐变图标，Firefox 通过 `theme_icons` 提供浅色 / 深色工具栏变体（该键仅 Firefox 使用，Chromium 会忽略）。需要重绘时执行：
+生成产物：`bookmark-sync-extension.zip`。图标统一复用「云 + 上下双向箭头」语义；Chromium 系使用自带对比度的渐变图标，Firefox 通过 `theme_icons` 提供浅色 / 深色工具栏变体（该键仅 Firefox 使用，Chromium 会忽略）。需要重绘时执行：
 
 ```bash
 python tools/generate_icons.py
@@ -153,7 +153,7 @@ python build.py
 | 构建产物 | Python 3（仅标准库） | 执行 `python build.py`，无需 pip 安装依赖 |
 | 重绘图标 | Python 3（仅标准库） | 执行 `python tools/generate_icons.py`，无第三方库 |
 | 运行测试 | Node.js 22 | `node tests/*.test.js`；测试为纯 Node 环境，无网络、无浏览器依赖 |
-| 持续加载（可选） | `web-ext` | Firefox 开发期用 `web-ext run --source-dir dist/universal` |
+| 持续加载（可选） | `web-ext` | Firefox 开发期用 `web-ext run --source-dir dist/extension` |
 | 运行时依赖 | **无** | 扩展不含 `package.json` / `node_modules` / 远程脚本 / 遥测 |
 
 ---
@@ -182,18 +182,18 @@ python build.py
 
 ### 6.3 下载插件
 
-下载 `bookmark-sync-universal.zip` 并解压；所有浏览器都使用**同一个解压目录**。
+下载 `bookmark-sync-extension.zip` 并解压；所有浏览器都使用**同一个解压目录**。
 
 ### 6.4 加载到浏览器
 
 | 浏览器 | 操作步骤 | 选择的目标 |
 |---|---|---|
-| Chrome | 地址栏输入 `chrome://extensions` → 打开「开发者模式」→「加载已解压的扩展程序」 | 解压后的 `dist/universal` 目录 |
-| Edge | 地址栏输入 `edge://extensions` → 打开「开发者模式」→「加载解压缩的扩展」 | 解压后的 `dist/universal` 目录 |
-| Firefox | 地址栏输入 `about:debugging#/runtime/this-firefox` →「临时载入附加组件」 | `dist/universal/manifest.json` |
-| Opera / Brave / Vivaldi | 扩展管理页 →「加载已解压的扩展」 | 解压后的 `dist/universal` 目录 |
+| Chrome | 地址栏输入 `chrome://extensions` → 打开「开发者模式」→「加载已解压的扩展程序」 | 解压后的 `dist/extension` 目录 |
+| Edge | 地址栏输入 `edge://extensions` → 打开「开发者模式」→「加载解压缩的扩展」 | 解压后的 `dist/extension` 目录 |
+| Firefox | 地址栏输入 `about:debugging#/runtime/this-firefox` →「临时载入附加组件」 | `dist/extension/manifest.json` |
+| Opera / Brave / Vivaldi | 扩展管理页 →「加载已解压的扩展」 | 解压后的 `dist/extension` 目录 |
 
-> Firefox 的「临时载入」在浏览器重启后失效；开发期可用 `web-ext run --source-dir dist/universal` 持续加载。
+> Firefox 的「临时载入」在浏览器重启后失效；开发期可用 `web-ext run --source-dir dist/extension` 持续加载。
 
 ### 6.5 安装后的默认状态
 
@@ -210,7 +210,7 @@ python build.py
 
 ```bash
 python tools/generate_icons.py   # 可选：仅在需要重绘图标时执行
-python build.py                  # 生成 dist/universal/ 与 bookmark-sync-universal.zip
+python build.py                  # 生成 dist/extension/ 与 bookmark-sync-extension.zip
 ```
 
 构建脚本会校验 manifest 合法性、双后台字段、图标存在性与 PNG 实际宽高。
@@ -447,7 +447,7 @@ GET /contents
 | 同步一直显示进行中 | 进度消息未被弹窗接收（例如后台被浏览器休眠） | 关闭再打开弹窗查看状态；刷新扩展后重试；不要连续点击同步 |
 | 弹窗提示「存在尚未生效的暂存配置」 | 上次输入未通过校验，已保存为草稿 | 补全 / 修正配置并再次「保存配置」 |
 | 保存失败但输入还在 | 存储写入异常，表单被刻意保留 | 直接点击「保存配置」重试，输入未丢失 |
-| Firefox 重启后插件消失 | 使用「临时载入附加组件」 | 开发期用 `web-ext run --source-dir dist/universal`；正式使用需签名安装 |
+| Firefox 重启后插件消失 | 使用「临时载入附加组件」 | 开发期用 `web-ext run --source-dir dist/extension`；正式使用需签名安装 |
 | 本地删除的书签在下一次同步后又出现 | 旧版本浏览器缓存了 GitHub 的 GET 响应（含过期 sha/content），把已删项当作远端变更拉回；已在本版修复 | 更新到当前版本（所有请求已禁用 HTTP 缓存）；删除后立即同步一次即可，删除会正常推送到远端 |
 | 远端被他人改动后同步失败（409） | 多端并发，SHA 不匹配；或旧版缓存返回过期 sha | 等待对方完成后重新同步；本版已消除缓存导致的伪 409，改动不会静默覆盖 |
 | 状态显示「本地已变化，等待手动同步」 | 自动同步关闭时书签发生变化 | 点击「立即同步」，或开启自动同步并保存配置 |
@@ -513,14 +513,14 @@ node tests/sync.test.js
 node tests/smoke.test.js
 node tests/security.test.js
 python build.py
-python -c "import json; m=json.load(open('dist/universal/manifest.json',encoding='utf-8')); assert m['manifest_version']==3 and m['background']['service_worker'] and m['background']['scripts']; print('unified manifest OK')"
+python -c "import json; m=json.load(open('dist/extension/manifest.json',encoding='utf-8')); assert m['manifest_version']==3 and m['background']['service_worker'] and m['background']['scripts']; print('unified manifest OK')"
 ```
 
 ### 12.2 人工端到端验证清单
 
 > 必须在真实浏览器与真实私有仓库中完成；以下项目无法仅靠静态检查替代。
 
-1. **同包加载**：同一个 `dist/universal` 目录分别在 Chrome 与 Firefox 加载成功。
+1. **同包加载**：同一个 `dist/extension` 目录分别在 Chrome 与 Firefox 加载成功。
 2. **连接验证**：填入自己的仓库与 classic PAT 后，测试连接应显示可访问、有写权限、同步文件不存在。
 3. **原有文件保护**：若同步文件已有非本插件内容，首次同步后确认 `backups/initial-*.json` 中存在原内容。
 4. **首次推送**：浏览器 A 添加 2 个书签 + 1 个文件夹并调整顺序 → 立即同步 → 仓库中核对层级、标题、URL、顺序。

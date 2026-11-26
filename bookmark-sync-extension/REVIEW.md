@@ -1,8 +1,10 @@
-# 项目全面复核报告（v1.0.0 · 首个大版本）
+# bookmark-sync-extension 项目全面复核报告（v1.0.0 · 首个大版本）
 
 > **版本说明**：v1.0.0 为当前发布版本，作为第一个大版本发布。本报告的复核结论、67 项测试与全部修复记录构成该版本的验收依据。
 >
-> **v1.0.0 版本修订**：统一 manifest、弹窗、后台 PING 响应、文档与测试中的版本标识为 `1.0.0`；重建通用 ZIP 并同步 Release `v1.0.0`。功能与同步规则保持不变。
+> **v1.0.0 版本修订**：统一 manifest、弹窗、后台 PING 响应、文档与测试中的版本标识为 `1.0.0`；重建 ZIP 并同步 Release `v1.0.0`。功能与同步规则保持不变。
+>
+> **仓库更名修订**：项目与仓库统一命名为 `bookmark-sync-extension`；产物 ZIP 改为 `bookmark-sync-extension.zip`，构建目录改为 `dist/extension/`，GitHub 源码目录由 `extension-source/` 改为 `bookmark-sync-extension/`，Release 资产改为 `bookmark-sync-extension-v1.0.0.zip`。功能与同步规则保持不变。
 
 > **v0.3.3 增补**：安装后默认零写入（`autoSync: false`、未配置不建闹钟、安装时不写 `deviceId`/状态、未配置时书签变化不写状态）；403 错误按 classic / fine-grained 令牌给出 `repo scope`、`Contents: Read and write` 与 SSO 指引；测试连接预检 `permissions.push` 且全程只读。新增 10 项测试（冒烟 17→23，安全 15→18），总计 55 项通过。
 >
@@ -113,7 +115,7 @@
 | `src/popup.js` | 表单、状态、冲突处理、备份恢复正确 | 修复 4.5 |
 | `build.py` | 单一通用产物生成、旧产物清理正确 | 无问题 |
 | `tests/*` | 46 项覆盖结构、加载、核心功能与安全 | 新增 smoke/security 两套 |
-| `dist/universal/` / `bookmark-sync-universal.zip` | 11 文件，与 src 一致，含全部修复 | 无问题 |
+| `dist/extension/` / `bookmark-sync-extension.zip` | 11 文件，与 src 一致，含全部修复 | 无问题 |
 
 ---
 
