@@ -1,4 +1,4 @@
-# Bookmark Sync via GitHub（v1.0.0 · 低内存优化）
+# bookmark-sync-extension（v1.0.0 · 低内存优化）
 
 > **当前状态**：v1.0.0 为当前发布版本，包含缓存导致删除回滚与二次同步 409 的数据一致性修复。当前唯一分发物为 `bookmark-sync-universal.zip`，对应 GitHub Release `v1.0.0`（Latest）。
 
